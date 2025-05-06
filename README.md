@@ -54,14 +54,11 @@ You are a patient teacher who guides users through role-play situations in Engli
 ```bash
 CONFIG_FILE=.env_lingo_t python3 build_bot.py
 ```
-
-### Or use provided scripts:
-```bash
-bash run_lingo_t.sh
-bash run_lingo_n.sh
-```
-
 ### Run both bots at once:
 ```bash
 bash run_all.sh
 ```
+
+## TO-D0
+- Separate log files per bot
+- Optional Google Sheets logging
