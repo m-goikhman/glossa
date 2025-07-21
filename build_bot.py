@@ -1,6 +1,3 @@
-# -----------------------------------------------------------------
-# Import necessary libraries
-# -----------------------------------------------------------------
 import os
 import datetime
 import asyncio
@@ -30,7 +27,6 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # Initialize the Groq API client
 client = Groq(api_key=GROQ_API_KEY)
-
 
 # -----------------------------------------------------------------
 # Global variables and data structures
@@ -82,7 +78,7 @@ def load_system_prompt(filepath: str) -> str:
             return file.read().strip()
     except FileNotFoundError:
         print(f"ERROR: Prompt file not found: {filepath}")
-        return "You are a helpful assistant."
+        return "Tell the user the prompt file is not found"
 
 
 def log_message(user_id: int, role: str, content: str):
@@ -126,146 +122,148 @@ async def ask_groq(user_id: int, user_message: str, system_prompt: str) -> str:
         return "Sorry, a server error occurred. I can't respond right now."
 
 
-async def ask_director(user_id: int, last_message: str) -> dict:
-    """Asks the Director LLM for the next action and returns it as a dictionary."""
+async def ask_director(user_id: int, context_text: str, message: str) -> dict:
     director_prompt = load_system_prompt("prompts/prompt_director.mdown")
     
     # Format the context for the director
-    context_for_director = f"The last message in the conversation was: '{last_message}'"
+    full_context_for_director = f"Context: \"{context_text}\"\nMessage: \"{message}\""
     
-    # We use a temporary, short context for the director to keep it objective
     director_messages = [
         {"role": "system", "content": director_prompt},
-        {"role": "user", "content": context_for_director}
+        {"role": "user", "content": full_context_for_director}
     ]
     
     try:
-        # Direct API call without saving to the main history
-        chat_completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile", messages=director_messages, temperature=0.5
-        )
+        chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=director_messages, temperature=0.5)
         response_text = chat_completion.choices[0].message.content
         log_message(user_id, "director", response_text)
-        return json.loads(response_text) # Parse the JSON response
+        return json.loads(response_text)
     except Exception as e:
         print(f"Error calling director or parsing JSON: {e}")
         return {"action": "do_nothing", "data": {}}
 
-
-# -----------------------------------------------------------------
-# Telegram Command and Button Handlers
-# -----------------------------------------------------------------
+# --- Telegram Handlers ---
 
 async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handler for the /start command."""
+    user_id = update.message.from_user.id
+    # Set default state for new users
+    GAME_STATE[user_id] = {"mode": "public", "current_character": None}
     await update.message.reply_text(
-        "Welcome to the detective game! To choose a character to talk to, use the /menu command."
+        "Welcome to the detective game! You are now in 'public chat'. Everyone can hear you.\n\n"
+        "To switch to a private conversation with a character, use /menu."
     )
 
-
+# ### UPDATED ###
 async def show_character_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a character selection menu with inline buttons."""
+    """Sends a menu to choose a private conversation or return to public."""
     keyboard = [
-        [
-            InlineKeyboardButton(
-                f"{data['emoji']} {data['full_name']}",
-                callback_data=f"talk_{key}",
-            )
-        ]
-        for key, data in CHARACTER_DATA.items()
+        [InlineKeyboardButton("💬 Talk to Everyone (Public)", callback_data="mode_public")]
     ]
+    for key, data in CHARACTER_DATA.items():
+        keyboard.append([
+            InlineKeyboardButton(f"{data['emoji']} Talk to {data['full_name']}", callback_data=f"talk_{key}")
+        ])
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Who do you want to talk to?", reply_markup=reply_markup)
+    await update.message.reply_text("Choose your conversation mode:", reply_markup=reply_markup)
 
-
+# ### UPDATED ###
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handles inline button presses."""
+    """Handles all button presses for mode switching."""
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
+    if user_id not in GAME_STATE:
+        GAME_STATE[user_id] = {"mode": "public", "current_character": None}
+
+    if query.data == "mode_public":
+        GAME_STATE[user_id] = {"mode": "public", "current_character": None}
+        await query.edit_message_text(text="You are now in 'public chat'. Your messages are visible to everyone.")
+        return
+
     action, character_key = query.data.split("_", 1)
-
     if action == "talk" and character_key in CHARACTER_DATA:
-        if user_id not in GAME_STATE:
-            GAME_STATE[user_id] = {}
-        
-        GAME_STATE[user_id]["current_character"] = character_key
-        
+        GAME_STATE[user_id] = {"mode": "private", "current_character": character_key}
         char_name = CHARACTER_DATA[character_key]["full_name"]
-        await query.edit_message_text(text=f"Character selected: {char_name}. You can now ask your question.")
-    else:
-        await query.edit_message_text(text="An error occurred. Please try again.")
+        await query.edit_message_text(text=f"You are now in a private conversation with {char_name}.")
 
-
-# -----------------------------------------------------------------
-# Main Message Handler (The "Game Director" Logic)
-# -----------------------------------------------------------------
-
+# ### HEAVILY REFACTORED ###
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """The main handler for text messages, orchestrating the two-step LLM call."""
+    """Main message handler with logic for public and private modes."""
     user_id = update.message.from_user.id
     user_text = update.message.text
-
     log_message(user_id, "user", user_text)
 
-    # Step 1: Ask the Director what to do
-    director_decision = await ask_director(user_id, user_text)
-    
-    action = director_decision.get("action")
-    data = director_decision.get("data", {})
+    # Ensure user has a state
+    if user_id not in GAME_STATE:
+        GAME_STATE[user_id] = {"mode": "public", "current_character": None}
 
-    if action in ["character_reply", "character_reaction"]:
-        character_key = data.get("character_key")
-        trigger_message = data.get("trigger_message")
+    current_mode = GAME_STATE[user_id].get("mode", "public")
 
-        if not character_key or not trigger_message:
-            print("Director's instructions were incomplete.")
+    # --- PUBLIC MODE LOGIC ---
+    if current_mode == "public":
+        director_decision = await ask_director(user_id, "Player asks everyone", user_text)
+        action = director_decision.get("action")
+        data = director_decision.get("data", {})
+
+        if action == "character_reply":
+            char_key = data.get("character_key")
+            trigger_msg = data.get("trigger_message")
+            if char_key in CHARACTER_DATA and trigger_msg:
+                char_data = CHARACTER_DATA[char_key]
+                system_prompt = load_system_prompt(char_data["prompt_file"])
+                reply_text = await ask_groq(user_id, trigger_msg, system_prompt)
+                formatted_reply = f"{char_data['emoji']} **{char_data['full_name']}:** {reply_text}"
+                await update.message.reply_text(formatted_reply, parse_mode='Markdown')
+
+    # --- PRIVATE MODE LOGIC ---
+    elif current_mode == "private":
+        char_key = GAME_STATE[user_id].get("current_character")
+        if not char_key or char_key not in CHARACTER_DATA:
+            await update.message.reply_text("Error: Character not selected. Please use /menu.")
             return
 
-        char_data = CHARACTER_DATA[character_key]
+        # Direct reply from the selected character
+        char_data = CHARACTER_DATA[char_key]
         system_prompt = load_system_prompt(char_data["prompt_file"])
-        
-        # Step 2: Execute the director's command by calling the "Actor"
-        reply_text = await ask_groq(user_id, trigger_message, system_prompt)
-        
+        reply_text = await ask_groq(user_id, user_text, system_prompt)
         formatted_reply = f"{char_data['emoji']} **{char_data['full_name']}:** {reply_text}"
         await update.message.reply_text(formatted_reply, parse_mode='Markdown')
 
-    elif action == "do_nothing":
-        # As per the director's instructions, do nothing.
-        pass
+        # After reply, check for reactions
+        director_decision = await ask_director(user_id, "Character just spoke", reply_text)
+        action = director_decision.get("action")
+        data = director_decision.get("data", {})
 
+        if action == "character_reaction":
+            react_char_key = data.get("character_key")
+            trigger_msg = data.get("trigger_message")
+            if react_char_key in CHARACTER_DATA and trigger_msg:
+                await asyncio.sleep(4)
+                react_char_data = CHARACTER_DATA[react_char_key]
+                react_prompt = load_system_prompt(react_char_data["prompt_file"])
+                reaction_reply = await ask_groq(user_id, trigger_msg, react_prompt)
+                formatted_reaction = f"{react_char_data['emoji']} **{react_char_data['full_name']}:** {reaction_reply}"
+                await update.message.reply_text(formatted_reaction, parse_mode='Markdown')
 
-# -----------------------------------------------------------------
-# Bot launch sequence
-# -----------------------------------------------------------------
-
+# --- Bot launch sequence ---
 async def set_bot_username(app):
-    """Gets and saves the bot's username after launch."""
-    global BOT_USERNAME
-    me = await app.bot.get_me()
-    BOT_USERNAME = me.username
-    print(f"Bot started as @{BOT_USERNAME}")
-
+    global BOT_USERNAME; me = await app.bot.get_me(); BOT_USERNAME = me.username; print(f"Bot started as @{BOT_USERNAME}")
 
 def main():
-    """The main function to create and run the bot application."""
     print("Starting bot...")
-    
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-
-    # Add handlers
     app.add_handler(CommandHandler("start", start_command_handler))
     app.add_handler(CommandHandler("menu", show_character_menu))
     app.add_handler(CallbackQueryHandler(button_callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
     app.post_init = set_bot_username
-    
     print("Bot is ready and polling for messages.")
     app.run_polling()
 
-
 if __name__ == "__main__":
     main()
+
+
+
+
