@@ -1,0 +1,71 @@
+{
+  "words_learned": [
+    {
+      "timestamp": "2025-07-22T17:11:06.489403",
+      "query": "touch base",
+      "feedback": "The phrase \"touch base\" is an idiomatic expression that means to make contact or communicate with someone, usually briefly, in order to catch up, exchange information, or check in. It's often used to describe a casual or informal conversation, and it can be used in both personal and professional contexts. For example: \"I'll touch base with you next week to see how the project is going.\" or \"I haven't seen my old friend in a while, I should touch base and see how she's doing.\""
+    },
+    {
+      "timestamp": "2025-07-22T17:13:40.242372",
+      "query": "harassing",
+      "feedback": "The word \"harassing\" means to annoy or intimidate someone repeatedly, often in a way that is aggressive or threatening. For example: \"The company was harassing her with constant phone calls and emails, demanding that she pay the debt.\" In another example: \"The neighbor was harassing the family by playing loud music and shouting insults.\""
+    },
+    {
+      "timestamp": "2025-07-22T17:15:27.717860",
+      "query": "reminisce",
+      "feedback": "The word \"reminisce\" means to think or talk about past experiences or memories, often in a nostalgic or fond way. For example: \"We spent the evening reminiscing about our childhood summers, sharing stories and laughing together.\" In another example: \"The old friends reminisced about their college days, remembering the good times and the challenges they faced.\""
+    },
+    {
+      "timestamp": "2025-07-23T10:53:48.512413",
+      "query": "paramedics",
+      "feedback": "The word \"paramedics\" refers to medical professionals who are trained to provide emergency care and transportation to people who are injured or ill. They are often the first to respond to emergency situations, such as accidents or medical emergencies, and are equipped to provide basic life support and stabilization until the patient can receive further medical attention. For example: \"The paramedics arrived quickly and provided medical care to the injured person.\""
+    }
+  ],
+  "writing_feedback": [
+    {
+      "timestamp": "2025-07-22T17:08:01.802123",
+      "query": "Who find Alex?",
+      "feedback": "Great effort! To make it grammatically correct, it should be 'Who **found** Alex?' We need the past tense of the verb 'find' to ask about a completed action in the past."
+    },
+    {
+      "timestamp": "2025-07-22T17:10:48.770336",
+      "query": "Then why did you came looking for him at the office party?",
+      "feedback": "You're on the right track! To make it grammatically correct, it should be 'Then why did you **come** looking for him at the office party?' instead of 'came'. We use 'come' as the base form of the verb after 'did' in questions."
+    },
+    {
+      "timestamp": "2025-07-22T17:15:08.360657",
+      "query": "Pauline, could you please tell what were you talking about?",
+      "feedback": "Great effort! To make it grammatically correct, it should be 'Pauline, could you please tell me what you were talking about?'. We need the phrase 'tell me' to make the sentence clear, and 'what you were talking about' is in the correct order for a question."
+    },
+    {
+      "timestamp": "2025-07-22T17:16:11.895561",
+      "query": "Than why Fiona and Tim have said he seemed upset to see you?",
+      "feedback": "Good question! To make it grammatically correct, it should be 'Then why did Fiona and Tim say he seemed upset to see you?'. We need to use 'Then' instead of 'Than' (which is used for comparisons), and 'did' is needed to make the sentence structure clear. Also, 'say' is a better fit than 'said' in this context."
+    },
+    {
+      "timestamp": "2025-07-22T17:19:23.590872",
+      "query": "I'm not suspecting you, please excuse my pertinence",
+      "feedback": "Great effort to apologize and clear the air! To make it sound more natural, you could say 'I'm not suspecting you, please excuse my impertinence' instead. 'Impertinence' is the correct word to use here, as it means being a bit too forward or intrusive, which fits perfectly with the context."
+    },
+    {
+      "timestamp": "2025-07-22T17:21:40.594714",
+      "query": "Are you at the same year?",
+      "feedback": "Great question! To make it grammatically correct, it should be 'Are you in the same year?' We use 'in' instead of 'at' when talking about being in a particular year of study."
+    },
+    {
+      "timestamp": "2025-07-23T10:53:25.637625",
+      "query": "could yp",
+      "feedback": "Great start! It looks like there might be a small typo. To make it grammatically correct, it should be 'Could you'. We need to correct 'yp' to 'you' for it to make sense."
+    },
+    {
+      "timestamp": "2025-07-23T10:54:36.015930",
+      "query": "\\menu",
+      "feedback": "Good job on thinking of a word! However, it seems like there might be a small typo. To make it grammatically correct, it should be 'menu'. We need to remove the backslash (\\) for it to be a valid word."
+    },
+    {
+      "timestamp": "2025-07-23T10:55:28.240331",
+      "query": "sounds wierd",
+      "feedback": "Great observation! To make it grammatically correct, it should be 'sounds weird'. We need to correct the spelling of 'weird' to match the standard English spelling."
+    }
+  ]
+}
