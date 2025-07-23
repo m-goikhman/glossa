@@ -1,13 +1,20 @@
 # Interactive Narrative Detective Game
 
 ## 🕵️ Project Overview
-An experimental project combining interactive murder mystery party games with AI-powered chatbots. The project allows users to engage in immersive narrative experiences, solving mysteries through dynamic role-playing scenarios.
+This project is an experimental tool designed to increase learning engagement for English language learners. It combines an interactive detective story with a multi-role AI chatbot, allowing users to practice their language skills in an immersive and motivating narrative experience.
 
 ## 🎭 Features
-- Character Chatbots: Unique backstories and motivations for each character
-- Interactive Scenarios: Dynamic detective stories with multiple outcomes
-- Clue System: Progressive information reveal to maintain suspense
-- Multi-player Support: Group game functionality
+- Multi-Role AI: A single bot seamlessly switches between multiple personalities: suspects, a narrator, and a language tutor.
+
+- Dynamic Scenes: An AI "Game Director" creates unique, cinematic scenes with character reactions and interactions, going beyond simple Q&A.
+
+- Contextual Memory: Characters remember the topic of conversation to avoid repeating themselves, creating a more natural dialogue flow.
+
+- Interactive Explanations: An integrated language tutor helps players learn English by explaining difficult words and phrases on demand.
+
+- Personalized Learning: The bot silently analyzes the player's messages and generates a personal progress report on their language skills.
+
+- Public & Private Modes: Players can question suspects in a group setting or take them aside for a private interrogation.
 
 ## 🔧 Technical Setup
 
@@ -17,57 +24,38 @@ pip install -r requirements.txt
 ```
 
 ### Configuration
-Create `.env` files for each bot with the following structure:
+The project uses a single `.env` file for configuration. Create it in the root directory of the project.
 
-Example: `.env_detective_bot`
+Example: `.env`
 ```
-TELEGRAM_TOKEN=your-telegram-bot-token
-AI_API_KEY=your-ai-api-key
-PROMPT_FILE=prompt_detective.txt
+TELEGRAM_TOKEN="your-telegram-bot-token"
+GROQ_API_KEY="your-groq-api-key"
 ```
-
-### Prompt Files
-Create prompt files with system instructions for each bot. Example:
-```
-You are a detective character in an interactive murder mystery game. Respond in character and help advance the narrative.
-```
+All other configurations, such as character data and prompt file paths, are managed in the `config.py` file.
 
 ### Running the Bots
 
-#### Run a single bot:
+3. Running the Bot
+To start the bot, simply run the `main.py` script from your terminal:
+
 ```bash
-CONFIG_FILE=.env_detective_bot python3 build_bot.py
+python3 main.py
 ```
 
-#### Run multiple bots:
-```bash
-bash run_all.sh
-```
-
-## 📝 Game Mechanics
-- Choose a scenario
-- Initialize character chatbots
-- Start the investigation
-- Follow clues and solve the mystery
 
 ## 🔍 Current Scenario
-"The Business of Murder" - A murder mystery set in an academic environment, featuring complex character interactions and hidden motivations.
+**"The Chicago Formula"** - A mystery set in an academic environment. A brilliant PhD student is found attacked and unconscious in his apartment after a party, and a detective (the player) must interrogate the remaining guests—a nervous colleague, a secret business partner, a distraught girlfriend, and a dangerous creditor—to uncover the truth.
+
 
 ## 📜 Source & Attribution
 - Original Murder Mystery Game: "The Business of Murder" by John H. Kim
 - Original Source: https://www.darkshire.net/jhkim/rpg/murder/business.html
 - Used with permission from the author for chatbot experimentation
 
-## 🛠 Technical Details
-- Supports multiple AI models and API integrations
-- Maintains short-term conversation memory
-- Logs chat interactions
-- Configurable through environment files
 
-## 📊 Upcoming Features
-- Separate log files per bot
-- Optional Google Sheets logging
-- Enhanced narrative complexity
+## ✨ Development Note
+This project was developed in close collaboration with an AI assistant. The core Python code, project architecture, and prompt engineering were iteratively designed and generated with the help of **Google's Gemini Pro 2.5**.
+
 
 ## 📝 License
 MIT License - See LICENSE file for details
