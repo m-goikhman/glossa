@@ -6,7 +6,7 @@ from telegram.constants import ChatAction
 
 from config import CHARACTER_DATA, GAME_STATE, message_cache
 from ai_services import ask_for_dialogue, ask_tutor_for_analysis, ask_word_spotter, ask_director
-from utils import load_system_prompt, get_user_log_path, write_log_entry, log_message
+from utils import load_system_prompt, get_user_log_path, write_log_entry, log_message, split_long_message
 
 async def analyze_and_log_text(user_id: int, text_to_analyze: str):
     """Silently analyzes user text and logs it if improvements are needed."""
@@ -63,7 +63,13 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
         for entry in logs["writing_feedback"]:
             report += f"📖 _You wrote:_ {entry['query']}\n"
             report += f"✅ *My suggestion:* {entry['feedback']}\n\n"
-    await update.message.reply_text(report, parse_mode='Markdown')
+
+    message_chunks = split_long_message(report)
+    for i, chunk in enumerate(message_chunks):
+        if i > 0:
+            await asyncio.sleep(1)
+        await update.message.reply_text(chunk, parse_mode='Markdown')
+
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles all inline button presses."""
@@ -101,7 +107,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text(text="You are now in 'public chat'. Your messages are visible to everyone.")
 
     elif action_type == "talk":
-        await context.bot.send_chat_action(chat_id=query.effective_chat.id, action=ChatAction.TYPING)
+        await context.bot.send_chat_action(chat_id=query.message.chat.id, action=ChatAction.TYPING)
         character_key = parts[1]
         if character_key in CHARACTER_DATA:
             GAME_STATE[user_id].update({"mode": "private", "current_character": character_key})

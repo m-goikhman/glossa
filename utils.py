@@ -43,3 +43,27 @@ def write_log_entry(user_id: int, entry_type: str, query: str, feedback: str = "
         
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(logs, f, indent=2, ensure_ascii=False)
+
+def split_long_message(text: str, max_length: int = 4000) -> list[str]:
+    """
+    Splits a long text into multiple smaller chunks, respecting paragraph and sentence boundaries.
+    """
+    if len(text) <= max_length:
+        return [text]
+    chunks = []
+    current_chunk = ""
+    paragraphs = text.split('\n\n')
+
+    for paragraph in paragraphs:
+        if len(current_chunk) + len(paragraph) + 2 > max_length:
+            chunks.append(current_chunk)
+            current_chunk = ""
+        
+        if current_chunk:
+            current_chunk += "\n\n"
+        current_chunk += paragraph
+    
+    if current_chunk:
+        chunks.append(current_chunk)
+        
+    return chunks
