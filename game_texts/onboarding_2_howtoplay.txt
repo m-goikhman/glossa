@@ -1,0 +1,7 @@
+*HOW TO PLAY*
+
+1.  **Public & Private Chat:** You begin in a 'public chat' where all characters can hear you. Use the `/menu` command at any time to switch to a private, one-on-one interrogation with a specific character.
+
+2.  **Explain Words:** To get an explanation of a difficult word or phrase, press the `💡 Explain...` button that appears under a character's message. This will open a sub-menu with options.
+
+3.  **Learning Report:** The Tutor bot silently analyzes your messages. Use the `/progress` command to get a report on the words you've learned and feedback on your writing.

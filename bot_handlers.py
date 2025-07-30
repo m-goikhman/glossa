@@ -31,8 +31,11 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
     """Handles the /start command with a fixed, detailed welcome message."""
     user_id = update.message.from_user.id
     GAME_STATE[user_id] = {"mode": "public", "current_character": None, "waiting_for_word": False, "topic_memory": {"topic": "Initial greeting", "spoken": []}}
-    welcome_text = load_system_prompt("prompts/welcome_message.txt")
-    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+    # Load and send the first onboarding message
+    consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
+    keyboard = [[InlineKeyboardButton("Continue", callback_data="onboarding__step2")]]
+    
+    await update.message.reply_text(consent_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
 async def show_character_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a menu to choose a conversation mode."""
@@ -79,9 +82,31 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     parts = query.data.split("__")
     action_type = parts[0]
     
-    if user_id not in GAME_STATE: GAME_STATE[user_id] = {}
+    if user_id not in GAME_STATE:
+        # A safeguard for users who might click old buttons after a bot restart
+        await query.edit_message_text(text="This button has expired. Please start over with /start.")
+        return
 
-    if action_type == "explain":
+    # ### NEW ONBOARDING LOGIC ###
+    if action_type == "onboarding":
+        sub_action = parts[1]
+
+        if sub_action == "step2":
+            # Load and show the "How to Play" text
+            how_to_play_text = load_system_prompt("game_texts/onboarding_2_howtoplay.txt")
+            keyboard = [[InlineKeyboardButton("Start Game", callback_data="onboarding__startgame")]]
+            # Edit the previous message to create a seamless flow
+            await query.edit_message_text(
+                text=how_to_play_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        
+        elif sub_action == "startgame":
+            intro_text = load_system_prompt("game_texts/intro.txt")
+            await query.edit_message_text(text=intro_text, parse_mode='Markdown')
+
+    elif action_type == "explain":
         sub_action = parts[1]
         if sub_action == "init":
             original_message_id = int(parts[2])
