@@ -147,14 +147,30 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text(text="You are now in 'public chat'. Your messages are visible to everyone.")
 
     elif action_type == "talk":
-        await context.bot.send_chat_action(chat_id=query.message.chat.id, action=ChatAction.TYPING)
+        await context.bot.send_chat_action(chat_id=query.message.chat_id, action=ChatAction.TYPING)
         character_key = parts[1]
         if character_key in CHARACTER_DATA:
             GAME_STATE[user_id].update({"mode": "private", "current_character": character_key})
             char_name = CHARACTER_DATA[character_key]["full_name"]
             narrator_prompt = load_system_prompt(CHARACTER_DATA["narrator"]["prompt_file"])
             description_text = await ask_for_dialogue(user_id, f"Describe taking {char_name} aside for a private talk.", narrator_prompt)
-            await query.edit_message_text(text=f"🎙️ _{description_text}_", parse_mode='Markdown')
+            
+            # Delete the old menu and send a new message
+            await query.delete_message()
+            reply_message = await context.bot.send_message(
+                chat_id=user_id,
+                text=f"🎙️ _{description_text}_",
+                parse_mode='Markdown'
+            )
+            
+            # Add the explain button to the new message
+            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
+            message_cache[reply_message.message_id] = description_text
+            await context.bot.edit_message_reply_markup(
+                chat_id=reply_message.chat_id,
+                message_id=reply_message.message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """The main handler for text messages, orchestrating the scene."""
@@ -199,13 +215,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         data = scene_action.get("data", {})
         if i > 0: await asyncio.sleep(4)
 
-        if action == "narrate_action":
-            trigger_msg = data.get("trigger_message")
-            if trigger_msg:
-                narrator_prompt = load_system_prompt(CHARACTER_DATA["narrator"]["prompt_file"])
-                description_text = await ask_for_dialogue(user_id, trigger_msg, narrator_prompt)
-                await update.message.reply_text(f"🎙️ _{description_text}_", parse_mode='Markdown')
-
         elif action in ["character_reply", "character_reaction"]:
             char_key = data.get("character_key")
             trigger_msg = data.get("trigger_message")
@@ -218,7 +227,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     formatted_reply = f"{char_data['emoji']} *{char_data['full_name']}:* {reply_text}"
                     reply_message = await update.message.reply_text(formatted_reply, parse_mode='Markdown')
                     
-                    if action == "character_reply":
+                    if (action == "character_reply"):
                         keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
                         message_cache[reply_message.message_id] = reply_text
                         await context.bot.edit_message_reply_markup(
