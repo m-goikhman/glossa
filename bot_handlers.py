@@ -87,24 +87,39 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text(text="This button has expired. Please start over with /start.")
         return
 
-    # ### NEW ONBOARDING LOGIC ###
+    # ### ONBOARDING LOGIC - REVISED TO KEEP MESSAGES ###
     if action_type == "onboarding":
         sub_action = parts[1]
 
+        # Deactivate the button on the previous message, leaving the text intact
+        await query.edit_message_reply_markup(reply_markup=None)
+
         if sub_action == "step2":
-            # Load and show the "How to Play" text
+            # Send the "How to Play" text as a NEW message
             how_to_play_text = load_system_prompt("game_texts/onboarding_2_howtoplay.txt")
             keyboard = [[InlineKeyboardButton("Start Game", callback_data="onboarding__startgame")]]
-            # Edit the previous message to create a seamless flow
-            await query.edit_message_text(
+            await context.bot.send_message(
+                chat_id=user_id,
                 text=how_to_play_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
         
         elif sub_action == "startgame":
+            await context.bot.send_chat_action(chat_id=query.message.chat_id, action=ChatAction.TYPING)
             intro_text = load_system_prompt("game_texts/intro.txt")
-            await query.edit_message_text(text=intro_text, parse_mode='Markdown')
+            sent_message = await context.bot.send_message(
+                chat_id=user_id,
+                text=intro_text,
+                parse_mode='Markdown'
+            )
+            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{sent_message.message_id}")]]
+            message_cache[sent_message.message_id] = intro_text
+            await context.bot.edit_message_reply_markup(
+                chat_id=sent_message.chat_id,
+                message_id=sent_message.message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
 
     elif action_type == "explain":
         sub_action = parts[1]
