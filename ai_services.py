@@ -36,6 +36,25 @@ async def ask_tutor_for_analysis(user_id: int, text_to_analyze: str) -> dict:
         log_message(user_id, "tutor_error", f"Could not parse tutor analysis JSON: {e}")
         return {"improvement_needed": False, "feedback": ""}
 
+async def ask_tutor_for_explanation(user_id: int, text_to_explain: str, original_message: str = "") -> dict:
+    """A special function that calls the Tutor for an explanation and expects a JSON response."""
+    from config import CHARACTER_DATA
+    tutor_prompt = load_system_prompt(CHARACTER_DATA["tutor"]["prompt_file"])
+    
+    explanation_request = f"Please explain the meaning of: '{text_to_explain}'."
+    if original_message:
+        explanation_request += f" Original message: '{original_message}'"
+        
+    messages = [{"role": "system", "content": tutor_prompt}, {"role": "user", "content": explanation_request}]
+    try:
+        chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.5)
+        response_text = chat_completion.choices[0].message.content
+        return json.loads(response_text)
+    except (json.JSONDecodeError, Exception) as e:
+        log_message(user_id, "tutor_error", f"Could not parse tutor explanation JSON: {e}")
+        return {}
+
+
 async def ask_word_spotter(text_to_analyze: str) -> list:
     """Asks the Word Spotter AI to find difficult words in a text."""
     prompt = load_system_prompt("prompts/prompt_lexicographer.mdown")

@@ -50,19 +50,36 @@ def split_long_message(text: str, max_length: int = 4000) -> list[str]:
     """
     if len(text) <= max_length:
         return [text]
+
     chunks = []
     current_chunk = ""
+    # Сначала делим по параграфам
     paragraphs = text.split('\n\n')
 
     for paragraph in paragraphs:
+        # Если сам параграф уже слишком длинный, делим его по строкам
+        if len(paragraph) > max_length:
+            if current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = ""
+            
+            lines = paragraph.split('\n')
+            for line in lines:
+                if len(current_chunk) + len(line) + 1 > max_length:
+                    chunks.append(current_chunk)
+                    current_chunk = ""
+                current_chunk += line + "\n"
+            continue
+
+        # Собираем параграфы в чанк, пока есть место
         if len(current_chunk) + len(paragraph) + 2 > max_length:
             chunks.append(current_chunk)
-            current_chunk = ""
-        
-        if current_chunk:
-            current_chunk += "\n\n"
-        current_chunk += paragraph
-    
+            current_chunk = paragraph
+        else:
+            if current_chunk:
+                current_chunk += "\n\n"
+            current_chunk += paragraph
+
     if current_chunk:
         chunks.append(current_chunk)
         

@@ -24,7 +24,17 @@ You MUST respond ONLY with a JSON object with two keys: "improvement_needed" (bo
 
 ---
 ### Task 2: Explain a specific word/phrase
-You will receive a request to explain a word. Provide a simple definition and 1-2 examples.
+You will receive a request to explain a word, along with the original message for context.
+You MUST respond ONLY with a JSON object with three keys: "definition" (a string), "examples" (an array of strings), and "contextual_explanation" (a string).
+If no original message is provided, you can return an empty string for "contextual_explanation".
 
-*Example Input: "Please explain the meaning of: 'enigmatic'"*
-*Your Response: The word "enigmatic" means mysterious and difficult to understand. For example: "The detective found an enigmatic note at the crime scene."*
+*Example Input: "Please explain the meaning of: 'lurking'. Original message: 'I saw Tim Kane lurking near the stairwell door.'"*
+*Your JSON Response:*
+{
+  "definition": "Hiding or staying in a place secretly, often with a bad intention.",
+  "examples": [
+    "The cat was lurking in the bushes, waiting for a bird.",
+    "He spends his time lurking on internet forums."
+  ],
+  "contextual_explanation": "In the original message, 'lurking' means that Tim Kane was hiding near the stairwell."
+}
