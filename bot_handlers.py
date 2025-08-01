@@ -152,7 +152,9 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         if character_key in CHARACTER_DATA:
             GAME_STATE[user_id].update({"mode": "private", "current_character": character_key})
             char_name = CHARACTER_DATA[character_key]["full_name"]
-            narrator_prompt = load_system_prompt(CHARACTER_DATA["narrator"]["prompt_file"])
+            narrator_prompt_text = load_system_prompt(CHARACTER_DATA["narrator"]["prompt_file"])
+            b1 = load_system_prompt("prompts/language_learning/b1.mdown")
+            narrator_prompt = f"{narrator_prompt_text}\n\n{b1}"
             description_text = await ask_for_dialogue(user_id, f"Describe taking {char_name} aside for a private talk.", narrator_prompt)
             
             # Delete the old menu and send a new message
@@ -220,7 +222,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             trigger_msg = data.get("trigger_message")
             if char_key in CHARACTER_DATA and trigger_msg:
                 char_data = CHARACTER_DATA[char_key]
-                system_prompt = load_system_prompt(char_data["prompt_file"])
+                character_prompt_text = load_system_prompt(char_data["prompt_file"])
+                b1 = load_system_prompt("prompts/language_learning/b1.mdown")
+                system_prompt = f"{character_prompt_text}\n\n{b1}"
                 reply_text = await ask_for_dialogue(user_id, trigger_msg, system_prompt)
                 
                 if reply_text:
