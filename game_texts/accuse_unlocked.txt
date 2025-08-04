@@ -1,0 +1,4 @@
+🎙️ _You have collected all the clues and spoken to everyone here in private. It looks like you have enough information to accuse someone._
+
+You can now make an accusation with the command `/accuse [Name]`, for example: `/accuse Fiona`
+However, there is no need to rush. You can continue your investigation if you want to be more certain. When you are ready, just use the command.

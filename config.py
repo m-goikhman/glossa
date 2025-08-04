@@ -8,6 +8,12 @@ load_dotenv()
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
+# --- Game Constants ---
+# Total number of clues to be examined to unlock the final accusation
+TOTAL_CLUES = 4
+# Character keys for all suspects in the game
+SUSPECT_KEYS = ["tim", "pauline", "fiona", "ronnie"]
+
 # --- Character & Actor Data ---
 CHARACTER_DATA = {
     "tim": {"prompt_file": "prompts/prompt_tim.mdown", "full_name": "Tim Kane", "emoji": "📚"},
