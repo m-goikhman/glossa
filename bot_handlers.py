@@ -188,12 +188,32 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
     elif action_type == "clue":
         clue_id = parts[1]
-        # Формируем путь к файлу и загружаем текст улики
         clue_filepath = f"game_texts/Clue{clue_id}.txt"
         clue_text = load_system_prompt(clue_filepath)
-        
-        # Отправляем как новое сообщение, чтобы не удалять меню улик
-        await context.bot.send_message(chat_id=user_id, text=clue_text, parse_mode='HTML')
+        image_filepath = f"images/clue{clue_id}.png"
+
+        try:
+            # Пытаемся отправить фото с подписью
+            with open(image_filepath, 'rb') as photo:
+                await context.bot.send_photo(
+                    chat_id=user_id,
+                    photo=photo,
+                    caption=clue_text,
+                    parse_mode='HTML'
+                )
+        except FileNotFoundError:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=clue_text,
+                parse_mode='HTML'
+            )
+        except Exception as e:
+            # Обработка других возможных ошибок
+            print(f"[ERROR] Could not send clue {clue_id}: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="Sorry, there was an error displaying this clue."
+            )
 
     elif action_type == "mode":
         GAME_STATE[user_id].update({"mode": "public", "current_character": None})
