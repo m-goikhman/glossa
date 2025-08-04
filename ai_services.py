@@ -62,7 +62,8 @@ async def ask_word_spotter(text_to_analyze: str) -> list:
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.2)
         response_text = chat_completion.choices[0].message.content
-        return json.loads(response_text)
+        words = json.loads(response_text)
+        return [word.lower() for word in words]
     except Exception as e:
         print(f"Error calling Word Spotter or parsing JSON: {e}"); return []
 

@@ -6,7 +6,7 @@ from telegram.constants import ChatAction
 
 from config import CHARACTER_DATA, GAME_STATE, message_cache
 from ai_services import ask_for_dialogue, ask_tutor_for_analysis, ask_tutor_for_explanation, ask_word_spotter, ask_director
-from utils import load_system_prompt, get_user_log_path, write_log_entry, log_message, split_long_message
+from utils import load_system_prompt, get_log_filepath, write_log_entry, log_message, split_long_message
 
 async def analyze_and_log_text(user_id: int, text_to_analyze: str):
     """Silently analyzes user text and logs it if improvements are needed."""
@@ -69,35 +69,42 @@ async def show_character_menu(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update.message.reply_text("Choose your conversation mode:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends the user a formatted report of their progress."""
+    """Sends the user a formatted report of their progress using HTML."""
     user_id = update.message.from_user.id
-    filepath = get_user_log_path(user_id)
+    filepath = get_log_filepath(user_id, 'progress')
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, "r", encoding="utf-8-sig") as f:
             logs = json.load(f)
         if not logs.get("words_learned") and not logs.get("writing_feedback"): raise FileNotFoundError
     except (FileNotFoundError, json.JSONDecodeError):
-        await update.message.reply_text("You don't have any saved progress yet!"); return
+        await update.message.reply_text("You don't have any saved progress yet!")
+        return
     
-    report = "--- \n*Your Progress Report*\n---\n\n"
+    report = "--- \n<b>Your Progress Report</b>\n---\n\n"
     
     if logs.get("words_learned"):
-        report += "*Words You've Learned:*\n"
+        report += "<b>Words You've Learned:</b>\n"
         for entry in logs["words_learned"]:
-            report += f"• `{entry['query']}`: _{entry['feedback']}_\n"
+            word = entry['query']
+            definition = entry['feedback']
+            report += f"• <code>{word}</code>: <tg-spoiler>{definition}</tg-spoiler>\n"
         report += "\n"
         
     if logs.get("writing_feedback"):
-        report += "*My Feedback on Your Phrases:*\n"
+        report += "<b>My Feedback on Your Phrases:</b>\n"
         for entry in logs["writing_feedback"]:
-            report += f"📖 _You wrote:_ {entry['query']}\n"
-            report += f"✅ *My suggestion:* {entry['feedback']}\n\n"
+            # Используем HTML-теги
+            query = entry['query']
+            feedback = entry['feedback']
+            report += f"📖 <i>You wrote:</i> {query}\n"
+            report += f"✅ <b>My suggestion:</b> {feedback}\n\n"
 
     message_chunks = split_long_message(report)
     for i, chunk in enumerate(message_chunks):
         if i > 0:
             await asyncio.sleep(1)
-        await update.message.reply_text(chunk, parse_mode='Markdown')
+        # Отправляем в режиме HTML
+        await update.message.reply_text(chunk, parse_mode='HTML')
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles all inline button presses."""
