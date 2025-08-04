@@ -29,9 +29,11 @@ def main():
     app.add_handler(CommandHandler("start", start_command_handler))
     app.add_handler(CommandHandler("menu", show_main_menu_handler))
     app.add_handler(CommandHandler("progress", progress_report_handler))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^🔍 Game Menu$'), show_main_menu_handler))
+    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📊 Language Progress$'), progress_report_handler))
     app.add_handler(CallbackQueryHandler(button_callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    
+
     app.post_init = post_init
     
     print("Bot is ready and polling for messages.")

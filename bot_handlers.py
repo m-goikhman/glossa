@@ -1,6 +1,6 @@
 import asyncio
 import json
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
@@ -131,6 +131,17 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             message_cache[sent_message.message_id] = intro_text
             await context.bot.edit_message_reply_markup(chat_id=sent_message.chat_id, message_id=sent_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
 
+            persistent_keyboard = [
+                [KeyboardButton("🔍 Game Menu"), KeyboardButton("📊 Language Progress")]
+            ]
+            reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
+            
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="Game menu and your language progress report are now available on the panel below 👇",
+                reply_markup=reply_markup
+            )
+
     elif action_type == "explain":
         sub_action = parts[1]
         if sub_action == "init":
@@ -188,31 +199,27 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
     elif action_type == "clue":
         clue_id = parts[1]
+
+        image_filepath = f"images/clue{clue_id}.png"
+        with open(image_filepath, 'rb') as photo:
+            await context.bot.send_photo(chat_id=user_id, photo=photo)
+
         clue_filepath = f"game_texts/Clue{clue_id}.txt"
         clue_text = load_system_prompt(clue_filepath)
-        image_filepath = f"images/clue{clue_id}.png"
 
-        try:
-            # Пытаемся отправить фото с подписью
-            with open(image_filepath, 'rb') as photo:
-                await context.bot.send_photo(
-                    chat_id=user_id,
-                    photo=photo,
-                    caption=clue_text,
-                    parse_mode='HTML'
-                )
-        except FileNotFoundError:
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=clue_text,
-                parse_mode='HTML'
-            )
-        except Exception as e:
-            # Обработка других возможных ошибок
-            print(f"[ERROR] Could not send clue {clue_id}: {e}")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="Sorry, there was an error displaying this clue."
+        reply_message = await context.bot.send_message(
+            chat_id=user_id,
+            text=clue_text,
+            parse_mode='HTML'
+        )
+
+        if reply_message:
+            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
+            message_cache[reply_message.message_id] = clue_text
+            await context.bot.edit_message_reply_markup(
+                chat_id=reply_message.chat_id,
+                message_id=reply_message.message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
     elif action_type == "mode":
