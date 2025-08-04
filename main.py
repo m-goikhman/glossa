@@ -8,7 +8,7 @@ from telegram.ext import (
 from config import TELEGRAM_TOKEN
 from bot_handlers import (
     start_command_handler,
-    show_character_menu,
+    show_main_menu_handler,
     progress_report_handler,
     button_callback_handler,
     handle_message,
@@ -27,7 +27,7 @@ def main():
 
     # Add all handlers from bot_handlers.py
     app.add_handler(CommandHandler("start", start_command_handler))
-    app.add_handler(CommandHandler("menu", show_character_menu))
+    app.add_handler(CommandHandler("menu", show_main_menu_handler))
     app.add_handler(CommandHandler("progress", progress_report_handler))
     app.add_handler(CallbackQueryHandler(button_callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

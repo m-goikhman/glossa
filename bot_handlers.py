@@ -30,8 +30,6 @@ async def send_tutor_explanation(update: Update, context: ContextTypes.DEFAULT_T
     if not definition:
         await context.bot.send_message(chat_id=user_id, text="Sorry, I couldn't get a definition for that.")
         return
-
-    # Форматируем ответ для пользователя
     reply_text = f"*{text_to_explain}:* {definition}\n"
     if examples:
         reply_text += "\n*Examples:*\n"
@@ -42,14 +40,12 @@ async def send_tutor_explanation(update: Update, context: ContextTypes.DEFAULT_T
 
     formatted_reply = f"{tutor_data['emoji']} *{tutor_data['full_name']}:*\n{reply_text}"
 
-    # Разбиваем длинное сообщение на части и отправляем их
     message_chunks = split_long_message(formatted_reply)
     for i, chunk in enumerate(message_chunks):
         if i > 0:
-            await asyncio.sleep(1) # Небольшая пауза между сообщениями
+            await asyncio.sleep(1)
         await context.bot.send_message(chat_id=user_id, text=chunk, parse_mode='Markdown')
     
-    # Сохраняем в лог только определение
     write_log_entry(user_id, "word", text_to_explain, definition)
 
 async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,13 +56,13 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
     keyboard = [[InlineKeyboardButton("Continue", callback_data="onboarding__step2")]]
     await update.message.reply_text(consent_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
 
-async def show_character_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Sends a menu to choose a conversation mode."""
-    keyboard = [[InlineKeyboardButton("💬 Talk to Everyone (Public)", callback_data="mode__public")]]
-    for key, data in CHARACTER_DATA.items():
-        if key not in ["tutor", "narrator"]:
-            keyboard.append([InlineKeyboardButton(f"{data['emoji']} Talk to {data['full_name']}", callback_data=f"talk__{key}")])
-    await update.message.reply_text("Choose your conversation mode:", reply_markup=InlineKeyboardMarkup(keyboard))
+async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends the main, top-level menu."""
+    keyboard = [
+        [InlineKeyboardButton("💬 Talk to Suspects", callback_data="menu__talk")],
+        [InlineKeyboardButton("🔍 Examine Evidence", callback_data="menu__evidence")]
+    ]
+    await update.message.reply_text("What would you like to do?", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends the user a formatted report of their progress using HTML."""
@@ -163,6 +159,41 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         elif sub_action == "other":
             GAME_STATE[user_id]["waiting_for_word"] = True
             await context.bot.send_message(chat_id=user_id, text="Okay, please type the word or phrase you want me to explain.")
+
+    elif action_type == "menu":
+        sub_action = parts[1]
+        if sub_action == "talk":
+            keyboard = [[InlineKeyboardButton("💬 Talk to Everyone (Public)", callback_data="mode__public")]]
+            for key, data in CHARACTER_DATA.items():
+                if key not in ["tutor", "narrator"]:
+                    keyboard.append([InlineKeyboardButton(f"{data['emoji']} Talk to {data['full_name']}", callback_data=f"talk__{key}")])
+            await query.edit_message_text("Choose your conversation partner:", reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        elif sub_action == "evidence":
+            keyboard = [
+                [InlineKeyboardButton("Clue 1: The Weapon", callback_data="clue__1")],
+                [InlineKeyboardButton("Clue 2: The Note", callback_data="clue__2")],
+                [InlineKeyboardButton("Clue 3: The Witness", callback_data="clue__3")],
+                [InlineKeyboardButton("Clue 4: The Motive", callback_data="clue__4")],
+                [InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="menu__main")]
+            ]
+            await query.edit_message_text("Which piece of evidence do you want to examine?", reply_markup=InlineKeyboardMarkup(keyboard))
+
+        elif sub_action == "main":
+             keyboard = [
+                [InlineKeyboardButton("💬 Talk to Suspects", callback_data="menu__talk")],
+                [InlineKeyboardButton("🔍 Examine Evidence", callback_data="menu__evidence")]
+            ]
+             await query.edit_message_text("What would you like to do?", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif action_type == "clue":
+        clue_id = parts[1]
+        # Формируем путь к файлу и загружаем текст улики
+        clue_filepath = f"game_texts/Clue{clue_id}.txt"
+        clue_text = load_system_prompt(clue_filepath)
+        
+        # Отправляем как новое сообщение, чтобы не удалять меню улик
+        await context.bot.send_message(chat_id=user_id, text=clue_text, parse_mode='HTML')
 
     elif action_type == "mode":
         GAME_STATE[user_id].update({"mode": "public", "current_character": None})
