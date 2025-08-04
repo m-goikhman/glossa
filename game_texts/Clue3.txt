@@ -1,9 +1,4 @@
 CLUE #3: The Note
 =================
-
-	A crumpled note lies in the hall outside of the bathroom.  It 
-is a lined scrap of notepad paper, which has hand-written in black felt-tip 
-pen the following: 
-"Pay up or die!"
-
-
+	A crumpled note lies in the hall outside of the bathroom.
+It is a piece of lined paper, and someone has written on it with black and red markers: “Pay up or die”

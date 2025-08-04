@@ -1,7 +1,4 @@
 CLUE #4: The Apartment
 ======================
-
-	A search of the rest of the apartment is generally long and 
-inconclusive, but for one odd fact.  The fire escape exit from the 
-apartment is unlocked and slightly ajar.  
-
+	Searching the rest of the apartment takes a long time, but it doesn’t give any clear answers.
+Only one strange thing stands out: the fire escape door is unlocked and open a little.

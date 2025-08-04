@@ -171,10 +171,10 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         
         elif sub_action == "evidence":
             keyboard = [
-                [InlineKeyboardButton("Clue 1: The Weapon", callback_data="clue__1")],
-                [InlineKeyboardButton("Clue 2: The Note", callback_data="clue__2")],
-                [InlineKeyboardButton("Clue 3: The Witness", callback_data="clue__3")],
-                [InlineKeyboardButton("Clue 4: The Motive", callback_data="clue__4")],
+                [InlineKeyboardButton("Clue 1: Report of the Medics", callback_data="clue__1")],
+                [InlineKeyboardButton("Clue 2: The Weapon", callback_data="clue__2")],
+                [InlineKeyboardButton("Clue 3: The Note", callback_data="clue__3")],
+                [InlineKeyboardButton("Clue 4: The Apartment", callback_data="clue__4")],
                 [InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="menu__main")]
             ]
             await query.edit_message_text("Which piece of evidence do you want to examine?", reply_markup=InlineKeyboardMarkup(keyboard))

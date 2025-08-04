@@ -1,21 +1,11 @@
-CLUE #1: The Body
+CLUE #1: Medical Report and Personal Belongings
 =================
-
-	The body had a very hard blow to the back of the head, which bled 
-significantly and probably cracked the skull.  It also has a gash on the 
-forehead, which seems to correspond to a smear of blood on the edge of the 
-sink, beside the toilet.  
-
-	He appears to be wearing the same clothes he was in the party. A thorough search of the body reveals the following: 
-
- -> Keychain with apartment keys, mailbox keys, office keys, and various 
-	others. 
-
- -> Wallet, containing $185 cash, credit cards, ID's, and an old photo 
-	of Fiona McAllister. 
-
- -> Checkbook, with various utility and credit card checks, and several 
-	large checks to Ronnie Snapper, amounting to $3500 over the 
-	past four months.  
-
- -> Silver Fountain Pen
+The paramedic gives his report about Alex's injuries: someone hit him very hard on the back of his head. This caused heavy bleeding and a serious head injury. There is also a deep cut on his forehead. This cut matches blood marks on the edge of the sink next to the toilet. Alex is badly hurt but his condition is stable. The ambulance has taken him to Chicago General Hospital.
+==================
+The medical team gave us Alex's personal things that they found at the scene:
+-> A keychain with apartment keys, mailbox keys, office keys, and several
+other keys.
+-> His wallet, which contains $185 in cash, credit cards, identity cards, and an old photo of Fiona McAllister.
+-> A checkbook with several large checks made out to Ronnie Snapper. These checks total $3500 over the
+past four months.
+-> A silver fountain pen.
