@@ -284,7 +284,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             state["accused_character"] = accused_key
             
             char_name = CHARACTER_DATA[accused_key]['full_name']
-            await query.edit_message_text(f"You chose to accuse {char_name}. Please write your final report and explain why you think they are guilty.")
+            await query.edit_message_text(f"🎙️ _All eyes turn to {char_name}. You take a deep breath. Now, explain to everyone why you believe this person is guilty. This is your moment to prove you are right._")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """The main handler for text messages, orchestrating the scene."""
