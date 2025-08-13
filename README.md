@@ -1,62 +1,151 @@
-# Interactive Narrative Detective Game
+# TeachOrTell - Interactive Narrative Detective Game
 
 ## 🕵️ Project Overview
-This project is an experimental tool designed to increase learning engagement for English language learners. It combines an interactive detective story with a multi-role AI chatbot, allowing users to practice their language skills in an immersive and motivating narrative experience.
 
-## 🎭 Features
-- Multi-Role AI: A single bot seamlessly switches between multiple personalities: suspects, a narrator, and a language tutor.
+This is an experimental educational tool designed to increase learning engagement for English language learners. It combines an interactive detective story with a multi-role AI chatbot, allowing users to practice their language skills in an immersive and motivating narrative experience.
 
-- Dynamic Scenes: An AI "Game Director" creates unique, cinematic scenes with character reactions and interactions, going beyond simple Q&A.
+The project features a detective mystery game where players act as detectives, interrogating AI-powered suspects while receiving real-time language assistance and progress tracking.
 
-- Contextual Memory: Characters remember the topic of conversation to avoid repeating themselves, creating a more natural dialogue flow.
+## 🎭 Key Features
 
-- Interactive Explanations: An integrated language tutor helps players learn English by explaining difficult words and phrases on demand.
+- **Multi-Role AI**: A single bot seamlessly switches between multiple personalities: suspects, a narrator, and a language tutor
+- **Dynamic Scenes**: An AI "Game Director" creates unique, cinematic scenes with character reactions and interactions
+- **Contextual Memory**: Characters remember conversation topics to avoid repetition, creating natural dialogue flow
+- **Interactive Explanations**: Integrated language tutor explains difficult words and phrases on demand
+- **Personalized Learning**: Silent analysis of player messages generates detailed language progress reports
+- **Public & Private Modes**: Question suspects in group settings or take them aside for private interrogation
+- **Persistent Game State**: Automatic save/resume functionality without losing progress
 
-- Personalized Learning: The bot silently analyzes the player's messages and generates a personal progress report on their language skills.
+## 🔍 Current Scenario: "The Chicago Formula"
 
-- Public & Private Modes: Players can question suspects in a group setting or take them aside for a private interrogation.
+A mystery set in an academic environment where a brilliant PhD student is found attacked and unconscious in his apartment after a party. As a detective, you must interrogate the remaining guests:
+- A nervous colleague
+- A secret business partner  
+- A distraught girlfriend
+- A dangerous creditor
 
-## 🔧 Technical Setup
+Uncover the truth through careful investigation and interrogation!
 
-### Dependencies
+## 🏗️ Project Structure
+
+This repository contains **two versions** of the same chatbot:
+
+```
+TeachOrTell/
+├── gcloud_webhook/          # Google Cloud App Engine version
+│   ├── main.py             # Webhook handler for production
+│   ├── app.yaml            # App Engine configuration
+│   ├── requirements.txt    # Production dependencies
+│   └── README.md           # Detailed deployment guide
+├── local_polling/          # Local development version
+│   ├── main.py             # Polling-based bot for local use
+│   ├── requirements.txt    # Development dependencies
+│   └── README.md           # Local setup guide
+├── game_texts/             # Game narrative content
+├── prompts/                # AI system prompts and character definitions
+├── images/                 # Game visual assets
+└── README.md               # This file
+```
+
+## 🚀 Quick Start
+
+### Option 1: Local Development (Recommended for testing)
+
 ```bash
+cd local_polling
 pip install -r requirements.txt
-```
 
-### Configuration
-The project uses a single `.env` file for configuration. Create it in the root directory of the project.
+# Create .env file with your API keys
+echo "TELEGRAM_TOKEN=your_bot_token" > .env
+echo "GROQ_API_KEY=your_groq_key" >> .env
 
-Example: `.env`
-```
-TELEGRAM_TOKEN="your-telegram-bot-token"
-GROQ_API_KEY="your-groq-api-key"
-```
-All other configurations, such as character data and prompt file paths, are managed in the `config.py` file.
-
-### Running the Bots
-
-3. Running the Bot
-To start the bot, simply run the `main.py` script from your terminal:
-
-```bash
 python3 main.py
 ```
 
+### Option 2: Google Cloud Deployment (Production)
 
-## 🔍 Current Scenario
-**"The Chicago Formula"** - A mystery set in an academic environment. A brilliant PhD student is found attacked and unconscious in his apartment after a party, and a detective (the player) must interrogate the remaining guests—a nervous colleague, a secret business partner, a distraught girlfriend, and a dangerous creditor—to uncover the truth.
+```bash
+cd gcloud_webhook
+pip install -r requirements.txt
 
+# Set up Google Cloud credentials and secrets
+# See gcloud_webhook/README.md for detailed instructions
 
-## 📜 Source & Attribution
-- Original Murder Mystery Game: "The Business of Murder" by John H. Kim
-- Original Source: https://www.darkshire.net/jhkim/rpg/murder/business.html
-- Used with permission from the author for chatbot experimentation
+gcloud app deploy
+```
 
+## 🔧 Technical Requirements
 
-## ✨ Development Note
+### Core Dependencies
+- **Python 3.13+**
+- **Telegram Bot Token** (from [@BotFather](https://t.me/botfather))
+- **Groq API Key** (for AI interactions)
+
+### Version-Specific Dependencies
+
+| Feature | Local Polling | Google Cloud |
+|---------|---------------|--------------|
+| **Web Framework** | python-telegram-bot | Starlette + Uvicorn |
+| **Deployment** | Local machine | Google App Engine |
+| **Storage** | Local files | Google Cloud Storage |
+| **Secrets** | .env file | Google Secret Manager |
+| **Scaling** | Single instance | Auto-scaling |
+
+## 📚 Game Flow
+
+1. **Onboarding**: Consent and game instructions
+2. **Investigation**: Examine clues and interrogate suspects
+3. **Accusation**: Make final accusation after gathering evidence
+4. **Progress Report**: View detailed language learning analysis
+
+## 🎯 Use Cases
+
+- **Language Learning**: Practice English through interactive storytelling
+- **Educational Gaming**: Engage students with narrative-driven learning
+- **AI Research**: Study multi-role chatbot interactions
+- **Game Development**: Template for interactive narrative games
+
+## 🔒 Privacy & Security
+
+- **No PII Collection**: Personal information is not collected or stored
+- **Sanitized Logging**: User messages are truncated and sanitized
+- **Secure Storage**: Production version uses Google Cloud with proper access controls
+- **Environment Isolation**: Development and production configurations are separate
+
+## 🧪 Testing
+
+```bash
+# Test game state management
+python3 gcloud_webhook/test_game_state.py
+
+# Test progress tracking  
+python3 gcloud_webhook/test_progress.py
+
+# Test secret management
+python3 gcloud_webhook/test_secrets.py
+```
+
+## 📝 Development Notes
+
 This project was developed in close collaboration with an AI assistant. The core Python code, project architecture, and prompt engineering were iteratively designed and generated with the help of **Google's Gemini Pro 2.5**.
 
+## 📜 Source & Attribution
 
-## 📝 License
-MIT License - See LICENSE file for details
-Original game content © John H. Kim - Used with permission
+- **Original Game**: "The Business of Murder" by John H. Kim
+- **Source**: https://www.darkshire.net/jhkim/rpg/murder/business.html
+- **License**: Used with permission from the author for chatbot experimentation
+
+## 📄 License
+
+- **Project**: MIT License
+- **Original Game Content**: © John H. Kim - Used with permission
+
+## 📞 Support
+
+For detailed setup instructions, see the README files in each version directory:
+- **Local Development**: `local_polling/README.md`
+- **Cloud Deployment**: `gcloud_webhook/README.md`
+
+---
+
+**Happy detecting and learning! 🕵️📚**

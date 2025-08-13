@@ -1,0 +1,6 @@
+🎙️ *You have now examined all the evidence and spoken privately with every suspect.*
+
+A new option is now available in your Game Menu: **Make an Accusation**.
+
+Press this button to say who you believe is guilty and close the case.
+There's no time limit, so feel free to review everything before making your final decision.

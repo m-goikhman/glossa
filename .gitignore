@@ -1,3 +1,11 @@
 .env
 chat_logs.txt
 user_logs/
+app.yaml
+*.log
+logs/
+__pycache__/
+*.pyc
+.DS_Store
+*.key
+secrets/
