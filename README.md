@@ -1,4 +1,4 @@
-# TeachOrTell - Interactive Narrative Detective Game
+# Interactive Narrative Detective Game
 
 ## 🕵️ Project Overview
 
