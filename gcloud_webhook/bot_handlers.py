@@ -8,19 +8,24 @@ from telegram.constants import ChatAction
 
 from config import CHARACTER_DATA, GAME_STATE, message_cache, TOTAL_CLUES, SUSPECT_KEYS
 from ai_services import ask_for_dialogue, ask_tutor_for_analysis, ask_tutor_for_explanation, ask_word_spotter, ask_director
-from utils import load_system_prompt, log_message, split_long_message
+from utils import load_system_prompt, log_message, split_long_message, combine_character_prompt
 from game_state_manager import game_state_manager
 from progress_manager import progress_manager
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 logger = logging.getLogger(__name__)
 
+def get_participant_code(user_id: int) -> str:
+    """Gets participant code from game state if available."""
+    state = GAME_STATE.get(user_id, {})
+    return state.get("participant_code")
+
 async def analyze_and_log_text(user_id: int, text_to_analyze: str):
     """Silently analyzes user text and logs it if improvements are needed."""
     analysis_result = await ask_tutor_for_analysis(user_id, text_to_analyze)
     if analysis_result.get("improvement_needed"):
         feedback = analysis_result.get("feedback", "")
-        log_message(user_id, "tutor_log", f"Logged feedback for: '{text_to_analyze}'")
+        log_message(user_id, "tutor_log", f"Logged feedback for: '{text_to_analyze}'", get_participant_code(user_id))
         # Use progress manager instead of local file system
         progress_manager.add_writing_feedback(user_id, text_to_analyze, feedback)
 
@@ -89,7 +94,10 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 "suspects_interrogated": set(),
                 "accuse_unlocked": False,
                 "topic_memory": {"topic": "Initial greeting", "spoken": []},
-                "game_completed": False
+                "game_completed": False,
+                "participant_code": None,
+                "waiting_for_participant_code": False,
+                "onboarding_step": "consent"
             }
             
             # Start with consent message (onboarding step 1)
@@ -142,7 +150,10 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "suspects_interrogated": set(),
             "accuse_unlocked": False,
             "topic_memory": {"topic": "Initial greeting", "spoken": []},
-            "game_completed": False
+            "game_completed": False,
+            "participant_code": None,
+            "waiting_for_participant_code": False,
+            "onboarding_step": "consent"
         }
         
         consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
@@ -180,7 +191,10 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
         "suspects_interrogated": set(),
         "accuse_unlocked": False,
         "topic_memory": {"topic": "Initial greeting", "spoken": []},
-        "game_completed": False
+        "game_completed": False,
+        "participant_code": None,
+        "waiting_for_participant_code": False,
+        "onboarding_step": "consent"
     }
     
     # Start with consent message (onboarding step 1)
@@ -224,7 +238,7 @@ async def handle_private_character_conversation(update: Update, context: Context
         return False
     
     char_data = CHARACTER_DATA[char_key]
-    system_prompt = load_system_prompt(char_data["prompt_file"])
+    system_prompt = combine_character_prompt(char_key)
     
     # Create a context-aware trigger for the character
     topic_memory = state.get("topic_memory", {"topic": "None", "spoken": []})
@@ -240,7 +254,7 @@ async def handle_private_character_conversation(update: Update, context: Context
             reply_message = await update.message.reply_text(formatted_reply, parse_mode='Markdown')
             
             # Add explain button
-            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
+            keyboard = [[InlineKeyboardButton("📒 Explain difficult words", callback_data=f"explain__init__{reply_message.message_id}")]]
             message_cache[reply_message.message_id] = reply_text
             await context.bot.edit_message_reply_markup(
                 chat_id=reply_message.chat_id, 
@@ -249,7 +263,7 @@ async def handle_private_character_conversation(update: Update, context: Context
             )
             
             # Log the character's response
-            log_message(user_id, f"character_{char_key}", reply_text)
+            log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
             
             logger.info(f"User {user_id}: Character '{char_key}' replied successfully")
             return True
@@ -260,7 +274,7 @@ async def handle_private_character_conversation(update: Update, context: Context
             await update.message.reply_text(f"{char_data['emoji']} *{char_data['full_name']}:* *[Character is thinking...]*", parse_mode='Markdown')
             
             # Log the fallback response
-            log_message(user_id, f"character_{char_key}", fallback_message)
+            log_message(user_id, f"character_{char_key}", fallback_message, get_participant_code(user_id))
             return True
             
     except Exception as e:
@@ -298,7 +312,7 @@ async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
     user_id = update.effective_user.id
     
     # Log the game menu request
-    log_message(user_id, "user_action", "Clicked 'Game Menu' button")
+    log_message(user_id, "user_action", "Clicked 'Game Menu' button", get_participant_code(user_id))
     
     # Check if user has game state, if not try to restore from saved state
     if user_id not in GAME_STATE:
@@ -361,9 +375,9 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
     
     # Log the progress report request
     if is_final_report:
-        log_message(user_id, "user_action", "Requested final progress report")
+        log_message(user_id, "user_action", "Requested final progress report", get_participant_code(user_id))
     else:
-        log_message(user_id, "user_action", "Clicked 'Language Progress' button")
+        log_message(user_id, "user_action", "Clicked 'Language Progress' button", get_participant_code(user_id))
     
     # Check if user has game_state, if not try to restore from saved state
     if user_id not in GAME_STATE:
@@ -484,12 +498,22 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_reply_markup(reply_markup=None)
 
         if sub_action == "step2":
-            how_to_play_text = load_system_prompt("game_texts/onboarding_2_howtoplay.txt")
-            keyboard = [[InlineKeyboardButton("Start Game", callback_data="onboarding__startgame")]]
-            await context.bot.send_message(chat_id=user_id, text=how_to_play_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+            # Request participant code
+            await context.bot.send_message(
+                chat_id=user_id, 
+                text="Please enter your participant code below (e.g., AN0842):",
+                reply_markup=ReplyKeyboardMarkup([[]], resize_keyboard=True)  # Clear keyboard
+            )
+            # Set state to wait for participant code
+            GAME_STATE[user_id]["waiting_for_participant_code"] = True
+            GAME_STATE[user_id]["onboarding_step"] = "waiting_for_code"
         
         elif sub_action == "startgame":
             await context.bot.send_chat_action(chat_id=query.message.chat_id, action=ChatAction.TYPING)
+            
+            # Mark onboarding as complete
+            GAME_STATE[user_id]["onboarding_step"] = "completed"
+            
             intro_text = load_system_prompt("game_texts/intro.txt")
             sent_message = await context.bot.send_message(chat_id=user_id, text=intro_text, parse_mode='Markdown')
             keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{sent_message.message_id}")]]
@@ -506,6 +530,9 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 text="Game menu and your language progress report are now available on the panel below 👇",
                 reply_markup=reply_markup
             )
+            
+            # Save the completed onboarding state
+            await save_user_game_state(user_id)
 
     elif action_type == "explain":
         sub_action = parts[1]
@@ -514,7 +541,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             original_text = message_cache.get(original_message_id, "I couldn't find the original message.")
             
             # Log the explain action initiation
-            log_message(user_id, "user_action", f"Clicked 'Explain' button for message: {original_text[:100]}...")
+            log_message(user_id, "user_action", f"Clicked 'Explain' button for message: {original_text[:100]}...", get_participant_code(user_id))
             
             words_to_explain = await ask_word_spotter(original_text)
             keyboard = []
@@ -530,7 +557,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             original_message = message_cache.get(original_message_id, "")
             
             # Log the word explanation request
-            log_message(user_id, "user_action", f"Requested explanation for word: '{word_to_explain}' from message: {original_message[:100]}...")
+            log_message(user_id, "user_action", f"Requested explanation for word: '{word_to_explain}' from message: {original_message[:100]}...", get_participant_code(user_id))
             
             await send_tutor_explanation(update, context, word_to_explain, original_message)
 
@@ -539,7 +566,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             original_text = message_cache.get(original_message_id, "I couldn't find the original message.")
             
             # Log the sentence explanation request
-            log_message(user_id, "user_action", f"Requested explanation for entire sentence: {original_text[:100]}...")
+            log_message(user_id, "user_action", f"Requested explanation for entire sentence: {original_text[:100]}...", get_participant_code(user_id))
             
             await send_tutor_explanation(update, context, original_text, original_text)
 
@@ -547,7 +574,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             state["waiting_for_word"] = True
             
             # Log the custom word explanation request
-            log_message(user_id, "user_action", "Requested to explain a custom word/phrase")
+            log_message(user_id, "user_action", "Requested to explain a custom word/phrase", get_participant_code(user_id))
             
             await context.bot.send_message(chat_id=user_id, text="Okay, please type the word or phrase you want me to explain.")
 
@@ -576,8 +603,8 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     elif action_type == "clue":
         clue_id = parts[1]
         
-        # Log the clue examination
-        log_message(user_id, "user_action", f"Examined clue {clue_id}")
+                    # Log the clue examination
+        log_message(user_id, "user_action", f"Examined clue {clue_id}", get_participant_code(user_id))
         
         state["clues_examined"].add(clue_id)
         await check_and_unlock_accuse(user_id, context)
@@ -607,7 +634,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             state.update({"mode": "private", "current_character": character_key})
             
             char_name = CHARACTER_DATA[character_key]["full_name"]
-            narrator_prompt = load_system_prompt(CHARACTER_DATA["narrator"]["prompt_file"])
+            narrator_prompt = combine_character_prompt("narrator")
             description_text = await ask_for_dialogue(user_id, f"Describe taking {char_name} aside for a private talk.", narrator_prompt)
             
             await query.delete_message()
@@ -617,7 +644,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
             
             # Log the narrator's transition description
-            log_message(user_id, "narrator", description_text)
+            log_message(user_id, "narrator", description_text, get_participant_code(user_id))
 
     elif action_type == "mode":
         sub_action = parts[1]
@@ -645,7 +672,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             )
             
             # Log the narrator's phrase
-            log_message(user_id, "narrator", random_phrase)
+            log_message(user_id, "narrator", random_phrase, get_participant_code(user_id))
             
             # Delete the menu message
             await query.delete_message()
@@ -674,7 +701,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         sub_action = parts[1]
         if sub_action == "init":
             # Log the accusation initiation
-            log_message(user_id, "user_action", "Clicked 'Make an Accusation' button")
+            log_message(user_id, "user_action", "Clicked 'Make an Accusation' button", get_participant_code(user_id))
             
             info_text = load_system_prompt("game_texts/accuse_unlocked.txt")
             keyboard = []
@@ -689,7 +716,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             
             # Log the accusation confirmation
             char_name = CHARACTER_DATA[accused_key]['full_name']
-            log_message(user_id, "user_action", f"Confirmed accusation against {char_name}")
+            log_message(user_id, "user_action", f"Confirmed accusation against {char_name}", get_participant_code(user_id))
             
             state["waiting_for_accusation_reason"] = True
             state["accused_character"] = accused_key
@@ -744,7 +771,7 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
         if char_key in CHARACTER_DATA and trigger_msg:
             logger.info(f"User {user_id}: Generating reply for character '{char_key}'.")
             char_data = CHARACTER_DATA[char_key]
-            system_prompt = load_system_prompt(char_data["prompt_file"])
+            system_prompt = combine_character_prompt(char_key)
             reply_text = await ask_for_dialogue(user_id, trigger_msg, system_prompt)
             
             if reply_text:
@@ -763,7 +790,7 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
                         await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
                         
                         # Log the character's response
-                        log_message(user_id, f"character_{char_key}", reply_text)
+                        log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
                 except Exception as e:
                     logger.error(f"User {user_id}: FAILED to send message to Telegram. Error: {e}. Original text: '{reply_text}'")
                     # Try sending without markdown as fallback
@@ -787,12 +814,12 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     await update.message.reply_text(f"{char_data['emoji']} *{char_data['full_name']}:* *[Character is thinking...]*", parse_mode='Markdown')
                     
                     # Log the fallback response
-                    log_message(user_id, f"character_{char_key}", fallback_message)
+                    log_message(user_id, f"character_{char_key}", fallback_message, get_participant_code(user_id))
                 except Exception as fallback_error:
                     logger.error(f"User {user_id}: Failed to send fallback message for empty reply: {fallback_error}")
 
             # Log the character's response (for both reply and reaction)
-            log_message(user_id, f"character_{char_key}", reply_text)
+            log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
             
             if char_key not in state["topic_memory"]["spoken"]:
                 state["topic_memory"]["spoken"].append(char_key)
@@ -828,7 +855,7 @@ async def process_director_decision(update: Update, context: ContextTypes.DEFAUL
 
     if not scene:
         logger.warning(f"User {user_id}: Director returned an empty scene for public conversation.")
-        log_message(user_id, "director_info", "Director returned an empty scene for public conversation.")
+        log_message(user_id, "director_info", "Director returned an empty scene for public conversation.", get_participant_code(user_id))
         
         # For public mode, we could add a fallback response here if needed
         # For now, just log the issue
@@ -853,7 +880,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     user_id = update.message.from_user.id
     user_text = update.message.text
-    log_message(user_id, "user", user_text)
+    
+    # Get participant code for logging (if state exists)
+    participant_code = None
+    if user_id in GAME_STATE:
+        participant_code = GAME_STATE[user_id].get("participant_code")
+    log_message(user_id, "user", user_text, participant_code)
 
     if user_id not in GAME_STATE:
         # Send immediate response to prevent user from leaving
@@ -895,6 +927,36 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     state = GAME_STATE[user_id]
+
+    # Check if waiting for participant code
+    if state.get("waiting_for_participant_code"):
+        # Validate participant code format (e.g., AN0842)
+        if len(user_text) == 6 and user_text[:2].isalpha() and user_text[2:4].isdigit() and user_text[4:6].isdigit():
+            # Store participant code
+            state["participant_code"] = user_text.upper()
+            state["waiting_for_participant_code"] = False
+            
+            # Continue with how-to-play instructions
+            how_to_play_text = load_system_prompt("game_texts/onboarding_2_howtoplay.txt")
+            keyboard = [[InlineKeyboardButton("Start Game", callback_data="onboarding__startgame")]]
+            await update.message.reply_text(
+                how_to_play_text, 
+                reply_markup=InlineKeyboardMarkup(keyboard), 
+                parse_mode='Markdown'
+            )
+            
+            # Set onboarding state to continue with game start
+            state["onboarding_step"] = "how_to_play"
+            
+            # Save state with participant code
+            await save_user_game_state(user_id)
+            logger.info(f"User {user_id}: Participant code '{user_text.upper()}' saved")
+            return
+        else:
+            await update.message.reply_text(
+                "❌ Invalid participant code format. Please use the format: First 2 letters + Day (01-31) + Last 2 digits of phone (e.g., AN0842)"
+            )
+            return
 
     if state.get("waiting_for_accusation_reason"):
         if await handle_accusation(update, context, user_id, user_text):

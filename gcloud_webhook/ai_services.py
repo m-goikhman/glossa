@@ -1,10 +1,12 @@
 import json
 from groq import Groq
 from config import GROQ_API_KEY, user_histories
-from utils import load_system_prompt, log_message
+from utils import load_system_prompt, log_message, combine_character_prompt
 
 # Initialize the Groq API client
 client = Groq(api_key=GROQ_API_KEY)
+
+
 
 async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str) -> str:
     """The main function for all dialogue-based AI calls. Always expects and returns a simple string."""
@@ -26,7 +28,7 @@ async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str) 
         return assistant_reply
     except Exception as e:
         print(f"ERROR: Failed in ask_for_dialogue for user {user_id}: {e}")
-        log_message(user_id, "dialogue_error", f"ask_for_dialogue failed: {e}")
+        log_message(user_id, "dialogue_error", f"ask_for_dialogue failed: {e}", None)
         return "Sorry, a server error occurred."
 
 async def ask_tutor_for_analysis(user_id: int, text_to_analyze: str) -> dict:
@@ -40,7 +42,7 @@ async def ask_tutor_for_analysis(user_id: int, text_to_analyze: str) -> dict:
         response_text = chat_completion.choices[0].message.content
         return json.loads(response_text)
     except (json.JSONDecodeError, Exception) as e:
-        log_message(user_id, "tutor_error", f"Could not parse tutor analysis JSON: {e}")
+        log_message(user_id, "tutor_error", f"Could not parse tutor analysis JSON: {e}", None)
         return {"improvement_needed": False, "feedback": ""}
 
 async def ask_tutor_for_explanation(user_id: int, text_to_explain: str, original_message: str = "") -> dict:
@@ -58,13 +60,13 @@ async def ask_tutor_for_explanation(user_id: int, text_to_explain: str, original
         response_text = chat_completion.choices[0].message.content
         return json.loads(response_text)
     except (json.JSONDecodeError, Exception) as e:
-        log_message(user_id, "tutor_error", f"Could not parse tutor explanation JSON: {e}")
+        log_message(user_id, "tutor_error", f"Could not parse tutor explanation JSON: {e}", None)
         return {}
 
 
 async def ask_word_spotter(text_to_analyze: str) -> list:
     """Asks the Word Spotter AI to find difficult words in a text."""
-    prompt = load_system_prompt("prompts/prompt_lexicographer.mdown")
+    prompt = load_system_prompt("prompts/prompt_lexicographer.md")
     messages = [{"role": "system", "content": prompt}, {"role": "user", "content": text_to_analyze}]
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.2)
@@ -76,7 +78,7 @@ async def ask_word_spotter(text_to_analyze: str) -> list:
 
 async def ask_director(user_id: int, context_text: str, message: str) -> dict:
     """Asks the Director LLM for the next scene and returns it as a dictionary."""
-    director_prompt = load_system_prompt("prompts/prompt_director.mdown")
+    director_prompt = load_system_prompt("prompts/prompt_director.md")
     full_context_for_director = f"Context: \"{context_text}\"\nMessage: \"{message}\""
     director_messages = [{"role": "system", "content": director_prompt}, {"role": "user", "content": full_context_for_director}]
     try:
@@ -84,7 +86,7 @@ async def ask_director(user_id: int, context_text: str, message: str) -> dict:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=director_messages, temperature=0.5)
         response_text = chat_completion.choices[0].message.content
         print(f"DEBUG: Director raw response for user {user_id}: {response_text[:200]}...")
-        log_message(user_id, "director", response_text)
+        log_message(user_id, "director", response_text, None)
         
         # Try to parse the JSON response
         try:
@@ -109,10 +111,10 @@ async def ask_director(user_id: int, context_text: str, message: str) -> dict:
         except json.JSONDecodeError as json_error:
             print(f"ERROR: Failed to parse director JSON response: {json_error}")
             print(f"Director response text: {response_text}")
-            log_message(user_id, "director_error", f"JSON parse error: {json_error}. Response: {response_text[:500]}")
+            log_message(user_id, "director_error", f"JSON parse error: {json_error}. Response: {response_text[:500]}", None)
             return {"scene": []}
             
     except Exception as e:
         print(f"ERROR: Failed to call director: {e}")
-        log_message(user_id, "director_error", f"Director call failed: {e}")
+        log_message(user_id, "director_error", f"Director call failed: {e}", None)
         return {"scene": []}

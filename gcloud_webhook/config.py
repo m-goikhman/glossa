@@ -45,12 +45,12 @@ SUSPECT_KEYS = ["tim", "pauline", "fiona", "ronnie"]
 
 # --- Character & Actor Data ---
 CHARACTER_DATA = {
-    "tim": {"prompt_file": "prompts/prompt_tim.mdown", "full_name": "Tim Kane", "emoji": "📚"},
-    "pauline": {"prompt_file": "prompts/prompt_pauline.mdown", "full_name": "Pauline Thompson", "emoji": "💼"},
-    "fiona": {"prompt_file": "prompts/prompt_fiona.mdown", "full_name": "Fiona McAllister", "emoji": "💔"},
-    "ronnie": {"prompt_file": "prompts/prompt_ronnie.mdown", "full_name": "Ronnie Snapper", "emoji": "😎"},
-    "tutor": {"prompt_file": "prompts/prompt_tutor.mdown", "full_name": "English Tutor", "emoji": "🧑‍🏫"},
-    "narrator": {"prompt_file": "prompts/prompt_narrator.mdown", "full_name": "Narrator", "emoji": "🎙️"},
+    "tim": {"prompt_file": "prompts/prompt_tim.md", "full_name": "Tim Kane", "emoji": "📚"},
+    "pauline": {"prompt_file": "prompts/prompt_pauline.md", "full_name": "Pauline Thompson", "emoji": "💼"},
+    "fiona": {"prompt_file": "prompts/prompt_fiona.md", "full_name": "Fiona McAllister", "emoji": "💔"},
+    "ronnie": {"prompt_file": "prompts/prompt_ronnie.md", "full_name": "Ronnie Snapper", "emoji": "😎"},
+    "tutor": {"prompt_file": "prompts/prompt_tutor.md", "full_name": "English Tutor", "emoji": "🧑‍🏫"},
+    "narrator": {"prompt_file": "prompts/prompt_narrator.md", "full_name": "Narrator", "emoji": "🎙️"},
 }
 
 # --- Global State Variables ---

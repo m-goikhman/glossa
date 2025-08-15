@@ -22,7 +22,7 @@ def _get_bucket():
     return bucket
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-def log_message(user_id: int, role: str, content: str):
+def log_message(user_id: int, role: str, content: str, participant_code: str = None):
     """Writes a message to the user's chat history log in Google Cloud Storage."""
     bucket = _get_bucket()
     if not bucket:
@@ -37,7 +37,11 @@ def log_message(user_id: int, role: str, content: str):
         else:
             sanitized_content = content
 
-        blob_name = f"user_logs/chat_history_{user_id}.txt"
+        # Use participant code if available, otherwise fall back to user_id
+        if participant_code:
+            blob_name = f"participant_logs/{participant_code}_chat_history.txt"
+        else:
+            blob_name = f"user_logs/chat_history_{user_id}.txt"
         blob = bucket.blob(blob_name)
 
         try:
@@ -56,6 +60,52 @@ def log_message(user_id: int, role: str, content: str):
 
 # Cache for system prompts to avoid repeated file I/O
 _prompt_cache = {}
+
+def combine_character_prompt(character_name: str) -> str:
+    """
+    Combines a character's specific prompt with B1 language learning requirements.
+    Only applies to game characters and narrator, not to tutor.
+    
+    Args:
+        character_name (str): Name of the character (e.g., 'narrator', 'tim', 'fiona', etc.)
+    
+    Returns:
+        str: Combined prompt with character-specific instructions and B1 language requirements
+    """
+    # List of characters that should include B1 requirements
+    game_characters = ["narrator", "tim", "fiona", "pauline", "ronnie"]
+    
+    try:
+        # Load character-specific prompt
+        character_prompt_path = f"prompts/prompt_{character_name}.md"
+        character_prompt = load_system_prompt(character_prompt_path)
+        
+        # Only combine with B1 requirements for game characters and narrator
+        if character_name in game_characters:
+            # Load B1 language requirements
+            b1_requirements = load_system_prompt("prompts/language_learning/b1.md")
+            
+            # Combine them with clear separation
+            combined_prompt = f"{character_prompt}\n\n---\n\n## Language Requirements\n{b1_requirements}"
+            
+            return combined_prompt
+        else:
+            # For non-game characters (like tutor), return just the character prompt
+            return character_prompt
+        
+    except Exception as e:
+        print(f"ERROR: Failed to combine prompt for character {character_name}: {e}")
+        # Fallback to just the character prompt if B1 requirements can't be loaded
+        return load_system_prompt(f"prompts/prompt_{character_name}.md")
+
+def get_participant_code_from_state(user_id: int) -> str:
+    """Gets participant code from game state if available."""
+    try:
+        from bot_handlers import GAME_STATE
+        state = GAME_STATE.get(user_id, {})
+        return state.get("participant_code")
+    except ImportError:
+        return None
 
 def load_system_prompt(filepath: str) -> str:
     """Loads the system prompt text from a file using an absolute path with caching."""

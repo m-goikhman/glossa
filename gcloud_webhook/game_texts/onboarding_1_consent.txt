@@ -3,3 +3,10 @@ Before we start, please make sure you have completed the initial survey: 📎 ht
 You’ll chat with characters, look for clues, and solve the mystery.
 ⚠️ Trigger warning reminder: the story includes conflict and a possible assault.
 Play at your own pace, and feel free to stop anytime if it’s not enjoyable.
+
+Please enter below the participant code you created earlier. Here’s a reminder of how it was made:
+
+Your code:
+
+First 2 letters of your first name + Day you were born (01-31) + Last 2 digits of your phone
+Example: Anna, born on March 8th, phone ending in 42 → AN0842
