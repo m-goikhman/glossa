@@ -1,6 +1,0 @@
-HOW TO PLAY
-🫆 **Talking & Evidence** – You start in a room with all the suspects. Tap “🔍 Game Menu” to speak to someone privately or review the evidence.
-
-🫆 **Word Help** – Tap “💡 Explain...” under a message to see what a word means.
-
-🫆 **Progress** – The Tutor bot tracks your English. Tap “📊 Language Progress” to see new words and feedback.

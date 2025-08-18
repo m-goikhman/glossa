@@ -1,0 +1,8 @@
+Great! Now please enter your participant code.
+
+How to make your code:
+🔤 First 2 letters of your first name
+📅 Your birth day (01-31)
+📱 Last 2 digits of your phone number
+
+Example: Anna, born March 8th, phone ending 42 → AN0842

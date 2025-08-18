@@ -61,18 +61,19 @@ def log_message(user_id: int, role: str, content: str, participant_code: str = N
 # Cache for system prompts to avoid repeated file I/O
 _prompt_cache = {}
 
-def combine_character_prompt(character_name: str) -> str:
+def combine_character_prompt(character_name: str, language_level: str = "B1") -> str:
     """
-    Combines a character's specific prompt with B1 language learning requirements.
+    Combines a character's specific prompt with language learning requirements for the specified level.
     Only applies to game characters and narrator, not to tutor.
     
     Args:
         character_name (str): Name of the character (e.g., 'narrator', 'tim', 'fiona', etc.)
+        language_level (str): Language level to use (A2, B1, or B2). Defaults to B1.
     
     Returns:
-        str: Combined prompt with character-specific instructions and B1 language requirements
+        str: Combined prompt with character-specific instructions and language requirements
     """
-    # List of characters that should include B1 requirements
+    # List of characters that should include language requirements
     game_characters = ["narrator", "tim", "fiona", "pauline", "ronnie"]
     
     try:
@@ -80,13 +81,14 @@ def combine_character_prompt(character_name: str) -> str:
         character_prompt_path = f"prompts/prompt_{character_name}.md"
         character_prompt = load_system_prompt(character_prompt_path)
         
-        # Only combine with B1 requirements for game characters and narrator
+        # Only combine with language requirements for game characters and narrator
         if character_name in game_characters:
-            # Load B1 language requirements
-            b1_requirements = load_system_prompt("prompts/language_learning/b1.md")
+            # Load language requirements for the specified level
+            language_file = f"prompts/language_learning/{language_level.lower()}.md"
+            language_requirements = load_system_prompt(language_file)
             
             # Combine them with clear separation
-            combined_prompt = f"{character_prompt}\n\n---\n\n## Language Requirements\n{b1_requirements}"
+            combined_prompt = f"{character_prompt}\n\n---\n\n## Language Requirements\n{language_requirements}"
             
             return combined_prompt
         else:
@@ -94,9 +96,22 @@ def combine_character_prompt(character_name: str) -> str:
             return character_prompt
         
     except Exception as e:
-        print(f"ERROR: Failed to combine prompt for character {character_name}: {e}")
-        # Fallback to just the character prompt if B1 requirements can't be loaded
+        print(f"ERROR: Failed to combine prompt for character {character_name} with level {language_level}: {e}")
+        # Fallback to just the character prompt if language requirements can't be loaded
         return load_system_prompt(f"prompts/prompt_{character_name}.md")
+
+def create_explain_button(message_id: int) -> list:
+    """
+    Creates a standardized "Explain difficult words" button for inline keyboards.
+    
+    Args:
+        message_id (int): The message ID to associate with the explain action
+    
+    Returns:
+        list: A list containing the button row for use in InlineKeyboardMarkup
+    """
+    from telegram import InlineKeyboardButton
+    return [[InlineKeyboardButton("📒 Explain difficult words", callback_data=f"explain__init__{message_id}")]]
 
 def get_participant_code_from_state(user_id: int) -> str:
     """Gets participant code from game state if available."""

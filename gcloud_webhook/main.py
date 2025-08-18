@@ -21,7 +21,9 @@ from privacy_config import sanitize_log_data
 from bot_handlers import (
     start_command_handler,
     restart_command_handler,
+    update_keyboard_handler,
     show_main_menu_handler,
+    show_language_learning_menu_handler,
     progress_report_handler,
     button_callback_handler,
     handle_message,
@@ -51,10 +53,13 @@ async def startup_event():
 
         ptb_app.add_handler(CommandHandler("start", start_command_handler))
         ptb_app.add_handler(CommandHandler("restart", restart_command_handler))
+        ptb_app.add_handler(CommandHandler("update_keyboard", update_keyboard_handler))
         ptb_app.add_handler(CommandHandler("menu", show_main_menu_handler))
         ptb_app.add_handler(CommandHandler("progress", progress_report_handler))
         ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^🔍 Game Menu$'), show_main_menu_handler))
-        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📊 Language Progress$'), progress_report_handler))
+        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📚 Language Learning Menu$'), show_language_learning_menu_handler))
+        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📊 Language Progress$'), show_language_learning_menu_handler))
+        # Move CallbackQueryHandler before the general MessageHandler to ensure button clicks are processed first
         ptb_app.add_handler(CallbackQueryHandler(button_callback_handler))
         ptb_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         

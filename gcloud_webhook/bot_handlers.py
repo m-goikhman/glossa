@@ -8,7 +8,7 @@ from telegram.constants import ChatAction
 
 from config import CHARACTER_DATA, GAME_STATE, message_cache, TOTAL_CLUES, SUSPECT_KEYS
 from ai_services import ask_for_dialogue, ask_tutor_for_analysis, ask_tutor_for_explanation, ask_word_spotter, ask_director
-from utils import load_system_prompt, log_message, split_long_message, combine_character_prompt
+from utils import load_system_prompt, log_message, split_long_message, combine_character_prompt, create_explain_button
 from game_state_manager import game_state_manager
 from progress_manager import progress_manager
 
@@ -102,7 +102,7 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             
             # Start with consent message (onboarding step 1)
             consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
-            keyboard = [[InlineKeyboardButton("Continue", callback_data="onboarding__step2")]]
+            keyboard = [[InlineKeyboardButton("📝 Questionnaire done, let's get started!", callback_data="onboarding__step2")]]
             
             await update.message.reply_text(
                 "🎮 Starting fresh detective game!",
@@ -125,7 +125,7 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
         
         # Set up persistent keyboard
         persistent_keyboard = [
-            [KeyboardButton("🔍 Game Menu"), KeyboardButton("📊 Language Progress")]
+            [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
         ]
         reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
         
@@ -153,11 +153,13 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "game_completed": False,
             "participant_code": None,
             "waiting_for_participant_code": False,
-            "onboarding_step": "consent"
+            "onboarding_step": "consent",
+            "current_intro_message_id": None,
+            "current_language_level": "B1"
         }
         
         consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
-        keyboard = [[InlineKeyboardButton("Continue", callback_data="onboarding__step2")]]
+        keyboard = [[InlineKeyboardButton("📝 Questionnaire done, let's get started!", callback_data="onboarding__step2")]]
         
         # Send consent message with inline keyboard
         await update.message.reply_text(
@@ -194,12 +196,14 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
         "game_completed": False,
         "participant_code": None,
         "waiting_for_participant_code": False,
-        "onboarding_step": "consent"
+        "onboarding_step": "consent",
+        "current_intro_message_id": None,
+        "current_language_level": "B1"
     }
     
     # Start with consent message (onboarding step 1)
     consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
-    keyboard = [[InlineKeyboardButton("Continue", callback_data="onboarding__step2")]]
+    keyboard = [[InlineKeyboardButton("📝 Questionnaire done, let's get started!", callback_data="onboarding__step2")]]
     
     await update.message.reply_text(
         "🎮 Game restarted! Starting from the beginning...",
@@ -212,6 +216,47 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
+
+
+async def update_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the /update_keyboard command - updates the persistent keyboard for existing users."""
+    user_id = update.message.from_user.id
+    logger.info(f"User {user_id}: Update keyboard command received")
+    
+    # Check if user has game state, if not try to restore from saved state
+    if user_id not in GAME_STATE:
+        saved_state_data = await game_state_manager.load_game_state(user_id)
+        
+        if saved_state_data and saved_state_data.get("state"):
+            saved_state = saved_state_data["state"]
+            if "game_completed" not in saved_state:
+                saved_state["game_completed"] = False
+            GAME_STATE[user_id] = saved_state
+            logger.info(f"User {user_id}: Restored game state for keyboard update")
+        else:
+            await update.message.reply_text("You don't have an active game. Use /start to begin!")
+            return
+    
+    state = GAME_STATE.get(user_id, {})
+    
+    # Check if game is already completed
+    if state.get("game_completed"):
+        await update.message.reply_text("🎭 Your game has already ended. Use /start to begin a new adventure!")
+        return
+    
+    # Update the persistent keyboard
+    persistent_keyboard = [
+        [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
+    
+    await update.message.reply_text(
+        "✅ **Keyboard Updated!**\n\nYour keyboard now shows the new menu structure.",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+    
+    logger.info(f"User {user_id}: Keyboard updated successfully")
 
 def get_random_common_space_phrase():
     """Returns a random phrase from the common_space.txt file."""
@@ -238,7 +283,9 @@ async def handle_private_character_conversation(update: Update, context: Context
         return False
     
     char_data = CHARACTER_DATA[char_key]
-    system_prompt = combine_character_prompt(char_key)
+    # Get current language level from user's game state
+    current_language_level = state.get("current_language_level", "B1")
+    system_prompt = combine_character_prompt(char_key, current_language_level)
     
     # Create a context-aware trigger for the character
     topic_memory = state.get("topic_memory", {"topic": "None", "spoken": []})
@@ -254,7 +301,7 @@ async def handle_private_character_conversation(update: Update, context: Context
             reply_message = await update.message.reply_text(formatted_reply, parse_mode='Markdown')
             
             # Add explain button
-            keyboard = [[InlineKeyboardButton("📒 Explain difficult words", callback_data=f"explain__init__{reply_message.message_id}")]]
+            keyboard = create_explain_button(reply_message.message_id)
             message_cache[reply_message.message_id] = reply_text
             await context.bot.edit_message_reply_markup(
                 chat_id=reply_message.chat_id, 
@@ -368,6 +415,89 @@ async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text("What would you like to do?", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+async def show_language_learning_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Sends the language learning menu with options for progress and difficulty settings."""
+    user_id = update.effective_user.id
+    
+    # Log the language learning menu request
+    log_message(user_id, "user_action", "Clicked 'Language Learning Menu' button", get_participant_code(user_id))
+    
+    # Check if user has game state, if not try to restore from saved state
+    if user_id not in GAME_STATE:
+        # Send immediate response to prevent user from leaving
+        typing_message = await update.message.reply_text("🔄 Restoring your game...")
+        
+        saved_state_data = await game_state_manager.load_game_state(user_id)
+        
+        if saved_state_data and saved_state_data.get("state"):
+            # User has an existing game - restore it silently
+            saved_state = saved_state_data["state"]
+            # Ensure game_completed flag is set if it doesn't exist
+            if "game_completed" not in saved_state:
+                saved_state["game_completed"] = False
+            GAME_STATE[user_id] = saved_state
+            
+            # Delete the typing message
+            try:
+                await context.bot.delete_message(chat_id=user_id, message_id=typing_message.message_id)
+            except:
+                pass
+            
+            logger.info(f"User {user_id}: Automatically restored game state from saved data in language learning menu")
+        else:
+            # Delete the typing message
+            try:
+                await context.bot.delete_message(chat_id=user_id, message_id=typing_message.message_id)
+            except:
+                pass
+            
+            # No saved state - redirect to start
+            await update.message.reply_text("You don't have an active game. Use /start to begin!")
+            return
+    
+    state = GAME_STATE.get(user_id, {})
+    
+    # Check if game is already completed
+    if state.get("game_completed"):
+        await update.message.reply_text("🎭 Your game has already ended. Use /start to begin a new adventure!")
+        return
+    
+    # Get current language level
+    current_level = state.get("current_language_level", "B1")
+    
+    # Create inline keyboard for language learning menu
+    keyboard = [
+        [InlineKeyboardButton("📊 Language Progress", callback_data="language_menu__progress")],
+        [InlineKeyboardButton(f"⚙️ Text Difficulty: {current_level}", callback_data="language_menu__difficulty")]
+    ]
+    
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            f"📚 **Language Learning Menu**\n\nCurrent difficulty level: **{current_level}**\n\n• **Language Progress** - View your learning statistics and feedback\n• **Text Difficulty** - Adjust how complex the game text should be (Light/Balanced/Advanced)",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+    else:
+        # If called from a message (e.g., old "Language Progress" button), update the keyboard
+        persistent_keyboard = [
+            [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+        ]
+        reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
+        
+        # Send the menu and update keyboard in one message
+        await update.message.reply_text(
+            f"📚 **Language Learning Menu**\n\nCurrent difficulty level: **{current_level}**\n\n• **Language Progress** - View your learning statistics and feedback\n• **Text Difficulty** - Adjust how complex the game text should be (Light/Balanced/Advanced)",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        
+        # Silently update the persistent keyboard
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="",
+            reply_markup=reply_markup
+        )
+
 
 async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, is_final_report: bool = False):
     """Sends the user a formatted report of their progress using HTML."""
@@ -377,7 +507,7 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
     if is_final_report:
         log_message(user_id, "user_action", "Requested final progress report", get_participant_code(user_id))
     else:
-        log_message(user_id, "user_action", "Clicked 'Language Progress' button", get_participant_code(user_id))
+        log_message(user_id, "user_action", "Clicked 'Language Progress' button in Language Learning Menu", get_participant_code(user_id))
     
     # Check if user has game_state, if not try to restore from saved state
     if user_id not in GAME_STATE:
@@ -420,11 +550,17 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
     # Get progress data from progress manager (Google Cloud Storage)
     logs = progress_manager.get_user_progress(user_id)
     
+    # Log what we received for debugging
+    logger.info(f"User {user_id}: Progress data received: {logs}")
+    
     # Check if there's any progress data
     if not logs.get("words_learned") and not logs.get("writing_feedback"):
+        logger.info(f"User {user_id}: No progress data found. Logs structure: {logs}")
         if not is_final_report:
             await update.message.reply_text("You don't have any saved progress yet!")
         return
+    
+    logger.info(f"User {user_id}: Found progress data - words_learned: {len(logs.get('words_learned', []))}, writing_feedback: {len(logs.get('writing_feedback', []))}")
     
     report_title = "Your Final Progress Report" if is_final_report else "Your Progress Report"
     report = f"--- \n<b>{report_title}</b>\n---\n\n"
@@ -455,6 +591,14 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
              await context.bot.send_message(chat_id=user_id, text=chunk, parse_mode='HTML')
         elif update.message:
             await update.message.reply_text(chunk, parse_mode='HTML')
+    
+    # Add back button to Language Learning Menu if this is not a final report
+    if not is_final_report and update.callback_query:
+        keyboard = [[InlineKeyboardButton("⬅️ Back to Language Menu", callback_data="language_menu__back")]]
+        await context.bot.send_message(
+            chat_id=user_id,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles all inline button presses."""
@@ -492,47 +636,248 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text("🎭 Your game has already ended. Use /start to begin a new adventure!")
         return
     
-    # ... (остальные блоки if/elif без изменений) ...
     if action_type == "onboarding":
         sub_action = parts[1]
         await query.edit_message_reply_markup(reply_markup=None)
 
         if sub_action == "step2":
             # Request participant code
+            code_text = load_system_prompt("game_texts/onboarding_2_code.txt")
             await context.bot.send_message(
                 chat_id=user_id, 
-                text="Please enter your participant code below (e.g., AN0842):",
-                reply_markup=ReplyKeyboardMarkup([[]], resize_keyboard=True)  # Clear keyboard
+                text=code_text,
+                parse_mode='Markdown'
             )
             # Set state to wait for participant code
             GAME_STATE[user_id]["waiting_for_participant_code"] = True
             GAME_STATE[user_id]["onboarding_step"] = "waiting_for_code"
         
-        elif sub_action == "startgame":
-            await context.bot.send_chat_action(chat_id=query.message.chat_id, action=ChatAction.TYPING)
+        # step3 removed - how to play will be shown after photo
+        
+        elif sub_action == "step4":
+            # Check if participant code was entered
+            if not GAME_STATE[user_id].get("participant_code"):
+                await query.answer("❌ Please enter your participant code first!")
+                return
             
-            # Mark onboarding as complete
-            GAME_STATE[user_id]["onboarding_step"] = "completed"
+            # Show language level selection
+            intro_b1_text = load_system_prompt("game_texts/intro-B1.txt")
             
-            intro_text = load_system_prompt("game_texts/intro.txt")
-            sent_message = await context.bot.send_message(chat_id=user_id, text=intro_text, parse_mode='Markdown')
-            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{sent_message.message_id}")]]
-            message_cache[sent_message.message_id] = intro_text
-            await context.bot.edit_message_reply_markup(chat_id=sent_message.chat_id, message_id=sent_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
-
-            persistent_keyboard = [
-                [KeyboardButton("🔍 Game Menu"), KeyboardButton("📊 Language Progress")]
-            ]
-            reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
-            
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="Game menu and your language progress report are now available on the panel below 👇",
-                reply_markup=reply_markup
+            # Send intro-B1 with language level buttons (language level text already shown in previous step)
+            sent_message = await context.bot.send_message(
+                chat_id=user_id, 
+                text=intro_b1_text,
+                parse_mode='Markdown'
             )
             
-            # Save the completed onboarding state
+            # Add language level selection buttons
+            # For B1 level (default), show all three options
+            keyboard = [
+                [InlineKeyboardButton("Easier", callback_data="language__easier")],
+                [InlineKeyboardButton("Perfect!", callback_data="language__perfect")],
+                [InlineKeyboardButton("More Advanced", callback_data="language__more_advanced")]
+            ]
+            
+            await context.bot.edit_message_reply_markup(
+                chat_id=sent_message.chat_id, 
+                message_id=sent_message.message_id, 
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Store current intro message ID for language level changes
+            GAME_STATE[user_id]["current_intro_message_id"] = sent_message.message_id
+            GAME_STATE[user_id]["current_language_level"] = "B1"
+            GAME_STATE[user_id]["onboarding_step"] = "language_selection"
+            
+            # Log the language selection step
+            logger.info(f"User {user_id}: Reached language selection step, showing intro-B1 with level buttons")
+        
+        
+
+    elif action_type == "language":
+        sub_action = parts[1]
+        
+        if sub_action == "easier":
+            # Change to A2 level
+            current_message_id = GAME_STATE[user_id].get("current_intro_message_id")
+            if current_message_id:
+                intro_a2_text = load_system_prompt("game_texts/intro-A2.txt")
+                await context.bot.edit_message_text(
+                    chat_id=user_id,
+                    message_id=current_message_id,
+                    text=intro_a2_text,
+                    parse_mode='Markdown'
+                )
+                GAME_STATE[user_id]["current_language_level"] = "A2"
+                
+                # Update buttons - no "Easier" button for A2 level
+                keyboard = [
+                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")],
+                    [InlineKeyboardButton("More Advanced", callback_data="language__more_advanced")]
+                ]
+                await context.bot.edit_message_reply_markup(
+                    chat_id=user_id,
+                    message_id=current_message_id,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+                # Log the language level change
+                logger.info(f"User {user_id}: Changed language level to A2")
+            else:
+                logger.error(f"User {user_id}: No current intro message ID found for language change")
+        
+        elif sub_action == "more_advanced":
+            # Change to B2 level
+            current_message_id = GAME_STATE[user_id].get("current_intro_message_id")
+            if current_message_id:
+                intro_b2_text = load_system_prompt("game_texts/intro-B2.txt")
+                await context.bot.edit_message_text(
+                    chat_id=user_id,
+                    message_id=current_message_id,
+                    text=intro_b2_text,
+                    parse_mode='Markdown'
+                )
+                GAME_STATE[user_id]["current_language_level"] = "B2"
+                
+                # Update buttons - no "More Advanced" button for B2 level
+                keyboard = [
+                    [InlineKeyboardButton("Easier", callback_data="language__easier")],
+                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")]
+                ]
+                await context.bot.edit_message_reply_markup(
+                    chat_id=user_id,
+                    message_id=current_message_id,
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                
+                # Log the language level change
+                logger.info(f"User {user_id}: Changed language level to B2")
+            else:
+                logger.error(f"User {user_id}: No current intro message ID found for language change")
+        
+        elif sub_action == "perfect":
+            # User is satisfied with current level, show confirmation and atmospheric start
+            current_level = GAME_STATE[user_id].get("current_language_level", "B1")
+            
+            # Show level confirmation
+            confirmation_text = load_system_prompt("game_texts/level_confirmed.txt").replace("[LEVEL]", current_level)
+            logger.info(f"User {user_id}: Sending level confirmation: {confirmation_text}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=confirmation_text,
+                parse_mode='Markdown'
+            )
+            logger.info(f"User {user_id}: Level confirmation sent successfully")
+            
+            # Send atmospheric photo with text
+            atmospheric_text = load_system_prompt("game_texts/atmospheric_start.txt")
+            try:
+                photo_path = "images/aric-cheng-7Bv9MrBan9s-unsplash.jpg"
+                logger.info(f"User {user_id}: Attempting to send photo from {photo_path}")
+                
+                with open(photo_path, "rb") as photo:
+                    await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=photo,
+                        caption=atmospheric_text,
+                        parse_mode='Markdown'
+                    )
+                logger.info(f"User {user_id}: Photo sent successfully")
+            except FileNotFoundError:
+                logger.error(f"User {user_id}: Photo file not found at {photo_path}")
+                # Fallback: send just the text without photo
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"🌃 {atmospheric_text}",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                logger.error(f"User {user_id}: Error sending photo: {e}")
+                # Fallback: send just the text without photo
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=f"🌃 {atmospheric_text}",
+                    parse_mode='Markdown'
+                )
+            
+            # Show how to play instructions
+            how_to_play_text = load_system_prompt("game_texts/onboarding_3_howtoplay.txt")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=how_to_play_text,
+                parse_mode='Markdown'
+            )
+            
+            # Show start game button
+            keyboard = [[InlineKeyboardButton("🚀 Start Investigation!", callback_data="case_intro__begin")]]
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="Ready to begin your investigation?",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Log the language level confirmation
+            logger.info(f"User {user_id}: Confirmed language level {current_level}, showing atmospheric start, how to play, and start game button")
+
+    elif action_type == "language_menu":
+        sub_action = parts[1]
+        
+        if sub_action == "progress":
+            # Show language progress report
+            await progress_report_handler(update, context, is_final_report=False)
+            
+        elif sub_action == "difficulty":
+            # Show difficulty selection menu
+            current_level = state.get("current_language_level", "B1")
+            
+            # Create difficulty selection keyboard
+            keyboard = []
+            
+            if current_level != "A2":
+                keyboard.append([InlineKeyboardButton("🌱 Light", callback_data="difficulty__set__A2")])
+            
+            keyboard.append([InlineKeyboardButton("⚖️ Balanced", callback_data="difficulty__set__B1")])
+            
+            if current_level != "B2":
+                keyboard.append([InlineKeyboardButton("🚀 Advanced", callback_data="difficulty__set__B2")])
+            
+            keyboard.append([InlineKeyboardButton("⬅️ Back to Language Menu", callback_data="language_menu__back")])
+            
+            await query.edit_message_text(
+                f"⚙️ **Text Difficulty Settings**\n\nCurrent level: **{current_level}**\n\nChoose your preferred difficulty level:\n\n🟢 **Light (A2)** - Simple vocabulary and grammar\n🟡 **Balanced (B1)** - Intermediate level, balanced complexity\n🔴 **Advanced (B2)** - More complex structures and vocabulary",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        
+        elif sub_action == "back":
+            # Return to language learning menu
+            await show_language_learning_menu_handler(update, context)
+
+    elif action_type == "difficulty":
+        sub_action = parts[1]
+        
+        if sub_action == "set":
+            new_level = parts[2]
+            old_level = state.get("current_language_level", "B1")
+            
+            # Update the language level
+            state["current_language_level"] = new_level
+            
+            # Save the updated state
             await save_user_game_state(user_id)
+            
+            # Log the difficulty change
+            log_message(user_id, "user_action", f"Changed text difficulty from {old_level} to {new_level}", get_participant_code(user_id))
+            logger.info(f"User {user_id}: Changed text difficulty from {old_level} to {new_level}")
+            
+            # Show confirmation and return to language learning menu
+            await query.edit_message_text(
+                f"✅ **Difficulty Updated!**\n\nYour text difficulty has been changed from **{old_level}** to **{new_level}**.\n\nThis setting will apply to all new conversations and character interactions. You can change it anytime from the Language Learning Menu.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Back to Language Menu", callback_data="language_menu__back")
+                ]]),
+                parse_mode='Markdown'
+            )
 
     elif action_type == "explain":
         sub_action = parts[1]
@@ -624,7 +969,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
         reply_message = await context.bot.send_message(chat_id=user_id, text=clue_text, parse_mode='Markdown')
         if reply_message:
-            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
+            keyboard = create_explain_button(reply_message.message_id)
             message_cache[reply_message.message_id] = clue_text
             await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -634,12 +979,14 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             state.update({"mode": "private", "current_character": character_key})
             
             char_name = CHARACTER_DATA[character_key]["full_name"]
-            narrator_prompt = combine_character_prompt("narrator")
+            # Get current language level from user's game state
+            current_language_level = state.get("current_language_level", "B1")
+            narrator_prompt = combine_character_prompt("narrator", current_language_level)
             description_text = await ask_for_dialogue(user_id, f"Describe taking {char_name} aside for a private talk.", narrator_prompt)
             
             await query.delete_message()
             reply_message = await context.bot.send_message(chat_id=user_id, text=f"🎙️ _{description_text}_", parse_mode='Markdown')
-            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
+            keyboard = create_explain_button(reply_message.message_id)
             message_cache[reply_message.message_id] = description_text
             await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
             
@@ -663,7 +1010,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             )
             
             # Add explain button
-            keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
+            keyboard = create_explain_button(reply_message.message_id)
             message_cache[reply_message.message_id] = random_phrase
             await context.bot.edit_message_reply_markup(
                 chat_id=reply_message.chat_id, 
@@ -722,6 +1069,103 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             state["accused_character"] = accused_key
             
             await query.edit_message_text(f"🎙️ _All eyes turn to {char_name}. You take a deep breath. Now, explain to everyone why you believe this person is guilty. This is your moment to prove you are right._", parse_mode='Markdown')
+
+    elif action_type == "case_intro":
+        logger.info(f"User {user_id}: case_intro action triggered with sub_action: {parts[1]}")
+        sub_action = parts[1]
+        
+        if sub_action == "situation":
+            # Show the situation details as a new message
+            try:
+                situation_text = load_system_prompt("game_texts/case_intro_2_situation.txt")
+                logger.info(f"User {user_id}: Successfully loaded situation_text: {situation_text[:100]}...")
+            except Exception as e:
+                logger.error(f"User {user_id}: Failed to load case_intro_2_situation.txt: {e}")
+                # Fallback to default text
+                situation_text = "📍 THE SITUATION\n\nAlex was found unconscious in his bathroom after a Christmas party."
+            
+            # Send new message with situation text and next button
+            sent_message = await context.bot.send_message(
+                chat_id=user_id,
+                text=situation_text,
+                parse_mode='Markdown'
+            )
+            
+            # Add next button
+            keyboard = [
+                [InlineKeyboardButton("Who was there?", callback_data="case_intro__suspects")]
+            ]
+            
+            await context.bot.edit_message_reply_markup(
+                chat_id=sent_message.chat_id,
+                message_id=sent_message.message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Remove button from previous message
+            await query.edit_message_reply_markup(reply_markup=None)
+            
+        elif sub_action == "suspects":
+            # Show the suspects information as a new message
+            try:
+                suspects_text = load_system_prompt("game_texts/case_intro_3_suspects.txt")
+                logger.info(f"User {user_id}: Successfully loaded suspects_text: {suspects_text[:100]}...")
+            except Exception as e:
+                logger.error(f"User {user_id}: Failed to load case_intro_3_suspects.txt: {e}")
+                # Fallback to default text
+                suspects_text = "👥 FOUR PEOPLE ARE IN THE APARTMENT\n\nNobody can leave until you complete your investigation."
+            
+            # Send new message with suspects text (no button)
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=suspects_text,
+                parse_mode='Markdown'
+            )
+            
+            # Remove button from previous message
+            await query.edit_message_reply_markup(reply_markup=None)
+            
+            # Add persistent keyboard for game menu and language learning
+            persistent_keyboard = [
+                [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+            ]
+            reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
+            
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="Game menu and language learning options are now available on the panel below 👇",
+                reply_markup=reply_markup
+            )
+            
+        elif sub_action == "begin":
+            # Show the first case introduction (this is called from the Start Investigation button)
+            logger.info(f"User {user_id}: Starting case introduction sequence")
+            try:
+                case_intro_1_text = load_system_prompt("game_texts/case_intro_1_call.txt")
+                logger.info(f"User {user_id}: Successfully loaded case_intro_1_text: {case_intro_1_text[:100]}...")
+            except Exception as e:
+                logger.error(f"User {user_id}: Failed to load case_intro_1_call.txt: {e}")
+                # Fallback to default text
+                case_intro_1_text = "📞 THE EMERGENCY CALL\n\nFiona called 911 a panic about Alex being unconscious."
+            
+            # Send the first case introduction with button
+            sent_message = await context.bot.send_message(
+                chat_id=user_id,
+                text=case_intro_1_text,
+                parse_mode='Markdown'
+            )
+            
+            # Add first navigation button - sequential flow
+            keyboard = [
+                [InlineKeyboardButton("What happened?", callback_data="case_intro__situation")]
+            ]
+            
+            await context.bot.edit_message_reply_markup(
+                chat_id=sent_message.chat_id,
+                message_id=sent_message.message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
 # --- Вспомогательные функции для обработчиков ---
 
 async def handle_accusation(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, user_text: str):
@@ -771,7 +1215,9 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
         if char_key in CHARACTER_DATA and trigger_msg:
             logger.info(f"User {user_id}: Generating reply for character '{char_key}'.")
             char_data = CHARACTER_DATA[char_key]
-            system_prompt = combine_character_prompt(char_key)
+            # Get current language level from user's game state
+            current_language_level = state.get("current_language_level", "B1")
+            system_prompt = combine_character_prompt(char_key, current_language_level)
             reply_text = await ask_for_dialogue(user_id, trigger_msg, system_prompt)
             
             if reply_text:
@@ -784,13 +1230,13 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     reply_message = await update.message.reply_text(formatted_reply, parse_mode='Markdown')
                     logger.info(f"User {user_id}: Successfully sent character reply.")
                     
-                    if action == "character_reply":
-                        keyboard = [[InlineKeyboardButton("💡 Explain...", callback_data=f"explain__init__{reply_message.message_id}")]]
-                        message_cache[reply_message.message_id] = reply_text
-                        await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
-                        
-                        # Log the character's response
-                        log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
+                    # Add explain button for both character_reply and character_reaction
+                    keyboard = create_explain_button(reply_message.message_id)
+                    message_cache[reply_message.message_id] = reply_text
+                    await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
+                    
+                    # Log the character's response
+                    log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
                 except Exception as e:
                     logger.error(f"User {user_id}: FAILED to send message to Telegram. Error: {e}. Original text: '{reply_text}'")
                     # Try sending without markdown as fallback
@@ -936,17 +1382,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             state["participant_code"] = user_text.upper()
             state["waiting_for_participant_code"] = False
             
-            # Continue with how-to-play instructions
-            how_to_play_text = load_system_prompt("game_texts/onboarding_2_howtoplay.txt")
-            keyboard = [[InlineKeyboardButton("Start Game", callback_data="onboarding__startgame")]]
+            # Continue with language level selection
+            keyboard = [[InlineKeyboardButton("🎯 Choose Language Level", callback_data="onboarding__step4")]]
+            language_level_text = load_system_prompt("game_texts/onboarding_4_language_level.txt")
             await update.message.reply_text(
-                how_to_play_text, 
-                reply_markup=InlineKeyboardMarkup(keyboard), 
-                parse_mode='Markdown'
+                language_level_text, 
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
             
-            # Set onboarding state to continue with game start
-            state["onboarding_step"] = "how_to_play"
+            # Set onboarding state to continue with language selection
+            state["onboarding_step"] = "waiting_for_language_selection"
+            
+            # Log the transition
+            logger.info(f"User {user_id}: Participant code saved, moving to language selection step")
             
             # Save state with participant code
             await save_user_game_state(user_id)
