@@ -1,75 +1,54 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [2.0.0] - 2025-08-13
+## [Unreleased] - Two-Attempt Accusation System
 
 ### Added
-- **Persistent Game State**: Automatic save/resume functionality using Google Cloud Storage
-- **Secret Manager Integration**: Secure API key management via Google Secret Manager
-- **Enhanced Commands**: Added `/restart` command for testing purposes
-- **Privacy Protection**: Sanitized logging and PII protection
-- **Performance Optimizations**: Lazy initialization and prompt caching
-- **Comprehensive Logging**: Detailed logging for debugging and monitoring
+- **Two-Attempt Accusation System**: Players now have 2 attempts to identify the correct suspect
+- **Early Accusation Access**: "Make an Accusation" button is now available in the main menu from the start
+- **Smart Accusation Warning**: When players try to accuse before gathering all evidence, they get a warning with options to:
+  - Proceed anyway with the accusation
+  - Return to investigation to gather more evidence
+- **Dynamic Warning Messages**: The warning shows exactly what evidence/interviews are still missing
+- **Defense Responses**: When players make incorrect accusations, suspects defend themselves with alibis:
+  - `defense_fiona.txt` - Fiona's defense emphasizing she called 911 to save Alex
+  - `defense_pauline.txt` - Pauline's defense about driving Alex and finding him
+  - `defense_ronnie.txt` - Ronnie's defense about arriving last and his Tesla vs Honda
+- **Interactive Reveal System**: After failing both attempts, players can choose to learn the truth:
+  - Separate reveal files: `reveal_1_truth.txt`, `reveal_2_killer.txt`, `reveal_3_evidence.txt`, `reveal_4_timeline.txt`, `reveal_5_motive.txt`
+  - Step-by-step revelation with interactive buttons
+  - Progressive disclosure: truth → evidence → timeline → motive
+  - Reliable file-based system (replaced complex parsing)
+- **Accusation Attempt Tracking**: Added `accusation_attempts` field to game state
+- **Enhanced Accusation Flow**: After wrong accusation, players can choose to:
+  - Make Another Accusation (if attempts < 2)
+  - Continue Investigation (return to main menu)
 
 ### Changed
-- **Architecture**: Migrated from local file storage to Google Cloud Storage
-- **Configuration**: Replaced hardcoded secrets with Secret Manager integration
-- **Error Handling**: Improved error handling for network and storage issues
-- **Code Organization**: Better separation of concerns and modular design
+- **Simplified Accusation Flow**: Removed requirement for players to explain their accusation - now works instantly
+- **Accusation Interface**: Updated accusation prompt to show attempt number (e.g., "Attempt 2/2")
+- **Accusation Unlock Text**: Updated `accuse_unlocked.txt` to explain the two-attempt system
+- **Game Over Flow**: Updated `outro_lose.txt` to offer choice between reveal and restart
+- **Enhanced Game Logic**: Replaced `handle_accusation()` with `handle_accusation_direct()` for immediate processing
+- **Accusation Accessibility**: Accusation button is now always visible in main menu (removed `accuse_unlocked` requirement)
 
-### Fixed
-- **Bucket Initialization**: Resolved GCS bucket creation issues
-- **Startup Errors**: Fixed startup failures due to invalid bucket names
-- **Secret Loading**: Added proper error handling for secret retrieval
-- **Memory Management**: Improved memory usage with lazy initialization
+### Technical Details
+- Players get exactly 2 attempts to identify Tim Kane as the attacker
+- **Instant Processing**: Accusations are processed immediately without asking for explanations
+- First wrong accusation shows character defense and offers second chance
+- Second wrong accusation shows character defense, then game over (no buttons)
+- **Defense Always First**: Both wrong attempts show character defense before any other messages
+- Correct accusation on any attempt results in victory
+- Attempt counter persists through game state saves/loads
+- Removed `waiting_for_accusation_reason` state - no longer needed
+- **Reliable Reveal System**: Replaced parsing logic with individual text files for each revelation step
+- **Fixed Game State**: Reveal actions are now properly allowed after game completion
 
-### Security
-- **API Key Security**: Moved from hardcoded secrets to secure storage
-- **Logging Privacy**: Implemented PII sanitization and truncation
-- **Access Control**: Proper IAM permissions for cloud resources
-
-## [1.0.0] - 2025-08-06
-
-### Added
-- **Core Game Engine**: Interactive detective story with AI-powered characters
-- **Multi-Role AI**: Seamless switching between suspects, narrator, and tutor
-- **Language Learning**: Integrated English language tutoring system
-- **Dynamic Scenarios**: AI-generated character interactions and responses
-- **Progress Tracking**: Silent analysis of user language skills
-- **Public/Private Modes**: Group and individual suspect interrogation
-
-### Technical Features
-- **Telegram Bot Integration**: Full webhook-based bot implementation
-- **Groq API Integration**: AI model interactions for dialogue generation
-- **Local File Storage**: Game state and progress persistence
-- **Modular Architecture**: Extensible design for future enhancements
-
-## [0.1.0] - 2025-08-01
-
-### Added
-- **Initial Project Setup**: Basic project structure and dependencies
-- **Game Design**: Murder mystery scenario "The Chicago Formula"
-- **Character Prompts**: AI system prompts for all game characters
-- **Basic Bot Framework**: Foundation for Telegram bot integration
-
----
-
-## Development Notes
-
-This project was developed in close collaboration with an AI assistant using Google's Gemini Pro 2.5. The development process involved iterative design, testing, and refinement of both the game mechanics and technical architecture.
-
-### Key Technical Decisions
-- **Google Cloud Platform**: Chosen for scalability and security
-- **Secret Manager**: Selected for secure credential management
-- **Cloud Storage**: Used for persistent data storage
-- **App Engine**: Deployed for reliable hosting and scaling
-
-### Future Roadmap
-- **Multi-language Support**: Expand beyond English language learning
-- **Additional Scenarios**: More detective stories and scenarios
-- **Advanced AI Features**: Enhanced character interactions and responses
-- **Analytics Dashboard**: Detailed learning progress analytics
+### Game Flow
+1. **Early Access**: Player can access accusations immediately from main menu
+2. **Smart Warning**: If not all evidence gathered, show warning with option to proceed or investigate more
+3. **Ready to Accuse**: If all evidence examined and suspects interviewed, proceed directly to accusation menu
+4. **Accusation Processing**: Player selects suspect - accusation is processed instantly
+5. **Wrong Accusation (first attempt)**: Show defense + options for second attempt or investigation
+6. **Wrong Accusation (second attempt)**: Show defense → offer reveal or restart choice
+7. **Reveal Option**: Progressive story revelation with interactive buttons
+8. **Victory**: Correct accusation on any attempt results in victory

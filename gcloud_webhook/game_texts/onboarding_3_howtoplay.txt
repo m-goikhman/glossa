@@ -1,11 +1,12 @@
 HOW TO PLAY
+
 💬 **Type in chat** - Talk to suspects by typing your questions
 
 👥 **Talk to everyone** - Just type here in chat! Everyone hears you
 
-👤 **Private talk** - Use menu to choose one person, then type
+👤 **Private talk** - Use menu to choose one person, then type. 💡 People share more secrets privately.
 
-🔍 **Evidence** - Check clues you find
+🗂️ **Case Materials** - Check evidence and Detective Guide with investigation tips
 
 📒 **Explain difficult words** - Get simple definitions from AI
 

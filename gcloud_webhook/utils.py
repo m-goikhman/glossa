@@ -61,6 +61,16 @@ def log_message(user_id: int, role: str, content: str, participant_code: str = N
 # Cache for system prompts to avoid repeated file I/O
 _prompt_cache = {}
 
+def clear_prompt_cache(filepath: str = None):
+    """Clears the prompt cache for a specific file or all files."""
+    global _prompt_cache
+    if filepath:
+        _prompt_cache.pop(filepath, None)
+        print(f"Cleared cache for {filepath}")
+    else:
+        _prompt_cache.clear()
+        print("Cleared all prompt cache")
+
 def combine_character_prompt(character_name: str, language_level: str = "B1") -> str:
     """
     Combines a character's specific prompt with language learning requirements for the specified level.

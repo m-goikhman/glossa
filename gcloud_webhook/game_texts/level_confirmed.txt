@@ -1,1 +1,3 @@
-Perfect! You've chosen [LEVEL] level. Get ready for your detective adventure!
+Perfect! You've chosen [LEVEL] level.
+💡 You can always change it from the 📖 *Learning Menu*.
+Get ready for your detective adventure!

@@ -57,7 +57,7 @@ async def startup_event():
         ptb_app.add_handler(CommandHandler("menu", show_main_menu_handler))
         ptb_app.add_handler(CommandHandler("progress", progress_report_handler))
         ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^🔍 Game Menu$'), show_main_menu_handler))
-        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📚 Language Learning Menu$'), show_language_learning_menu_handler))
+        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📖 Learning Menu$'), show_language_learning_menu_handler))
         ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📊 Language Progress$'), show_language_learning_menu_handler))
         # Move CallbackQueryHandler before the general MessageHandler to ensure button clicks are processed first
         ptb_app.add_handler(CallbackQueryHandler(button_callback_handler))

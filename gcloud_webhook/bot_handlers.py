@@ -2,12 +2,15 @@ import asyncio
 import json
 import os
 import logging
+import time
+from datetime import datetime, timedelta
+from typing import Tuple
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
 from config import CHARACTER_DATA, GAME_STATE, message_cache, TOTAL_CLUES, SUSPECT_KEYS
-from ai_services import ask_for_dialogue, ask_tutor_for_analysis, ask_tutor_for_explanation, ask_word_spotter, ask_director
+from ai_services import ask_for_dialogue, ask_tutor_for_analysis, ask_tutor_for_explanation, ask_tutor_for_final_summary, ask_word_spotter, ask_director
 from utils import load_system_prompt, log_message, split_long_message, combine_character_prompt, create_explain_button
 from game_state_manager import game_state_manager
 from progress_manager import progress_manager
@@ -88,8 +91,10 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 "mode": "public",
                 "current_character": None,
                 "waiting_for_word": False,
-                "waiting_for_accusation": False,
+
                 "accused_character": None,
+                "accusation_attempts": 0,  # Track number of accusation attempts (max 2)
+                "reveal_step": 0,  # Track progress through reveal sequence
                 "clues_examined": set(),
                 "suspects_interrogated": set(),
                 "accuse_unlocked": False,
@@ -97,7 +102,8 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 "game_completed": False,
                 "participant_code": None,
                 "waiting_for_participant_code": False,
-                "onboarding_step": "consent"
+                "onboarding_step": "consent",
+                "game_start_time": None
             }
             
             # Start with consent message (onboarding step 1)
@@ -125,7 +131,7 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
         
         # Set up persistent keyboard
         persistent_keyboard = [
-            [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+            [KeyboardButton("🔍 Game Menu"), KeyboardButton("� Learning Menu")]
         ]
         reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
         
@@ -144,8 +150,9 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "mode": "public",
             "current_character": None,
             "waiting_for_word": False,
-            "waiting_for_accusation": False,
+
             "accused_character": None,
+            "accusation_attempts": 0,  # Track number of accusation attempts (max 2)
             "clues_examined": set(),
             "suspects_interrogated": set(),
             "accuse_unlocked": False,
@@ -155,7 +162,8 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "waiting_for_participant_code": False,
             "onboarding_step": "consent",
             "current_intro_message_id": None,
-            "current_language_level": "B1"
+            "current_language_level": "B1",
+            "game_start_time": None
         }
         
         consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
@@ -187,8 +195,9 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
         "mode": "public",
         "current_character": None,
         "waiting_for_word": False,
-        "waiting_for_accusation": False,
+
         "accused_character": None,
+        "accusation_attempts": 0,  # Track number of accusation attempts (max 2)
         "clues_examined": set(),
         "suspects_interrogated": set(),
         "accuse_unlocked": False,
@@ -198,7 +207,8 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
         "waiting_for_participant_code": False,
         "onboarding_step": "consent",
         "current_intro_message_id": None,
-        "current_language_level": "B1"
+        "current_language_level": "B1",
+        "game_start_time": None
     }
     
     # Start with consent message (onboarding step 1)
@@ -233,6 +243,9 @@ async def update_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_
                 saved_state["game_completed"] = False
             GAME_STATE[user_id] = saved_state
             logger.info(f"User {user_id}: Restored game state for keyboard update")
+            
+            # Check if post-test message should be scheduled for restored game
+            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
         else:
             await update.message.reply_text("You don't have an active game. Use /start to begin!")
             return
@@ -246,7 +259,7 @@ async def update_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_
     
     # Update the persistent keyboard
     persistent_keyboard = [
-        [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+        [KeyboardButton("🔍 Game Menu"), KeyboardButton("� Learning Menu")]
     ]
     reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
     
@@ -354,6 +367,36 @@ async def check_and_unlock_accuse(user_id: int, context: ContextTypes.DEFAULT_TY
         # Save state when accusation is unlocked
         await save_user_game_state(user_id)
 
+def is_player_ready_to_accuse(user_id: int) -> Tuple[bool, str]:
+    """
+    Checks if player is ready to make an accusation.
+    Returns: (is_ready, message_describing_what_is_missing)
+    """
+    state = GAME_STATE.get(user_id, {})
+    if not state:
+        return False, "Game state not found"
+    
+    clues_examined = len(state.get("clues_examined", set()))
+    suspects_interrogated = len(state.get("suspects_interrogated", set()))
+    
+    all_clues_examined = clues_examined == TOTAL_CLUES
+    all_suspects_interrogated = suspects_interrogated >= len(SUSPECT_KEYS)
+    
+    if all_clues_examined and all_suspects_interrogated:
+        return True, ""
+    
+    missing_parts = []
+    if not all_clues_examined:
+        missing_clues = TOTAL_CLUES - clues_examined
+        missing_parts.append(f"{missing_clues} more clue{'s' if missing_clues > 1 else ''}")
+    
+    if not all_suspects_interrogated:
+        missing_suspects = len(SUSPECT_KEYS) - suspects_interrogated
+        missing_parts.append(f"{missing_suspects} more suspect{'s' if missing_suspects > 1 else ''}")
+    
+    missing_text = " and ".join(missing_parts)
+    return False, f"You still need to examine {missing_text} before making an accusation."
+
 async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends the main game menu, conditionally showing the accuse button."""
     user_id = update.effective_user.id
@@ -383,6 +426,9 @@ async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
                 pass
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in main menu")
+            
+            # Check if post-test message should be scheduled for restored game
+            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
         else:
             # Delete the typing message
             try:
@@ -403,11 +449,9 @@ async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     keyboard = [
         [InlineKeyboardButton("💬 Talk to Suspects", callback_data="menu__talk")],
-        [InlineKeyboardButton("🔍 Examine Evidence", callback_data="menu__evidence")]
+        [InlineKeyboardButton("🗂️ Case Materials", callback_data="menu__evidence")],
+        [InlineKeyboardButton("☝️ Make an Accusation", callback_data="accuse__init")]
     ]
-
-    if state.get("accuse_unlocked"):
-        keyboard.append([InlineKeyboardButton("☝️ Make an Accusation", callback_data="accuse__init")])
     
     if update.callback_query:
         await update.callback_query.edit_message_text("What would you like to do?", reply_markup=InlineKeyboardMarkup(keyboard))
@@ -444,6 +488,9 @@ async def show_language_learning_menu_handler(update: Update, context: ContextTy
                 pass
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in language learning menu")
+            
+            # Check if post-test message should be scheduled for restored game
+            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
         else:
             # Delete the typing message
             try:
@@ -480,7 +527,7 @@ async def show_language_learning_menu_handler(update: Update, context: ContextTy
     else:
         # If called from a message (e.g., old "Language Progress" button), update the keyboard
         persistent_keyboard = [
-            [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+            [KeyboardButton("🔍 Game Menu"), KeyboardButton("� Learning Menu")]
         ]
         reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
         
@@ -531,6 +578,9 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
                 pass
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in progress report")
+            
+            # Check if post-test message should be scheduled for restored game
+            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
         else:
             # Delete the typing message
             try:
@@ -600,6 +650,70 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
+async def generate_final_english_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Generates a comprehensive final English report with tutor summary + detailed progress."""
+    user_id = update.effective_user.id
+    
+    # Log the final report request
+    log_message(user_id, "user_action", "Requested final English report", get_participant_code(user_id))
+    
+    # Get progress data from progress manager
+    logs = progress_manager.get_user_progress(user_id)
+    
+    # Note: We always generate a report, even if user had no errors or new words
+    # This allows the tutor to congratulate them and suggest higher difficulty
+    
+    # Send typing indicator
+    await context.bot.send_chat_action(chat_id=user_id, action=ChatAction.TYPING)
+    
+    # Get tutor's final summary
+    try:
+        tutor_response = await ask_tutor_for_final_summary(user_id, logs)
+        tutor_summary = tutor_response.get("summary", "Great job completing the game! You showed curiosity and engagement with English.")
+    except Exception as e:
+        logger.error(f"Failed to get tutor summary for user {user_id}: {e}")
+        tutor_summary = "Great job completing the game! You showed curiosity and engagement with English."
+    
+    # Build the final report
+    report = f"--- \n<b>🎓 Your Final English Report</b>\n---\n\n"
+    
+    # Add tutor's general summary
+    report += f"<b>📝 Your Teacher's Summary:</b>\n"
+    report += f"<i>{tutor_summary}</i>\n\n"
+    
+    # Add detailed progress section
+    report += f"<b>📊 Detailed Progress:</b>\n\n"
+    
+    # Handle case where user had no errors or new words
+    if not logs.get("words_learned") and not logs.get("writing_feedback"):
+        report += f"🎯 <b>Excellent Performance!</b>\n"
+        report += f"• No grammar errors that needed correction\n"
+        report += f"• No unfamiliar words encountered\n"
+        report += f"• Demonstrated strong English comprehension\n\n"
+    else:
+        if logs.get("words_learned"):
+            report += f"<b>🔤 Words You've Learned ({len(logs['words_learned'])}):</b>\n"
+            for entry in logs["words_learned"]:
+                word = entry['query']
+                definition = entry['feedback']
+                report += f"• <code>{word}</code>: <tg-spoiler>{definition}</tg-spoiler>\n"
+            report += "\n"
+            
+        if logs.get("writing_feedback"):
+            report += f"<b>✍️ My Feedback on Your Phrases ({len(logs['writing_feedback'])}):</b>\n"
+            for entry in logs["writing_feedback"]:
+                query = entry['query']
+                feedback = entry['feedback']
+                report += f"📖 <i>You wrote:</i> {query}\n"
+                report += f"✅ <b>My suggestion:</b> {feedback}\n\n"
+
+    # Split and send the report
+    message_chunks = split_long_message(report)
+    for i, chunk in enumerate(message_chunks):
+        if i > 0:
+            await asyncio.sleep(1)
+        await context.bot.send_message(chat_id=user_id, text=chunk, parse_mode='HTML')
+
 async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handles all inline button presses."""
     query = update.callback_query
@@ -607,6 +721,8 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = query.from_user.id
     parts = query.data.split("__")
     action_type = parts[0]
+    
+    logger.info(f"User {user_id}: Button callback received - action: {action_type}, data: {query.data}")
     
     if user_id not in GAME_STATE:
         # Show immediate response to prevent user from leaving
@@ -624,6 +740,10 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             GAME_STATE[user_id] = saved_state
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in button callback")
+            
+            # Check if post-test message should be scheduled for restored game
+            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+            
             # Continue processing the button press with restored state
         else:
             await query.edit_message_text(text="This button has expired. Please start over with /start.")
@@ -631,8 +751,8 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
     state = GAME_STATE[user_id]
     
-    # Check if game is already completed (but allow final report)
-    if state.get("game_completed") and action_type != "final":
+    # Check if game is already completed (but allow final report and reveal)
+    if state.get("game_completed") and action_type not in ["final", "reveal"]:
         await query.edit_message_text("🎭 Your game has already ended. Use /start to begin a new adventure!")
         return
     
@@ -697,81 +817,45 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     elif action_type == "language":
         sub_action = parts[1]
         
-        if sub_action == "easier":
-            # Change to A2 level
-            current_message_id = GAME_STATE[user_id].get("current_intro_message_id")
-            if current_message_id:
-                intro_a2_text = load_system_prompt("game_texts/intro-A2.txt")
-                await context.bot.edit_message_text(
-                    chat_id=user_id,
-                    message_id=current_message_id,
-                    text=intro_a2_text,
-                    parse_mode='Markdown'
-                )
-                GAME_STATE[user_id]["current_language_level"] = "A2"
-                
-                # Update buttons - no "Easier" button for A2 level
-                keyboard = [
-                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")],
-                    [InlineKeyboardButton("More Advanced", callback_data="language__more_advanced")]
-                ]
-                await context.bot.edit_message_reply_markup(
-                    chat_id=user_id,
-                    message_id=current_message_id,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                
-                # Log the language level change
-                logger.info(f"User {user_id}: Changed language level to A2")
-            else:
-                logger.error(f"User {user_id}: No current intro message ID found for language change")
-        
-        elif sub_action == "more_advanced":
-            # Change to B2 level
-            current_message_id = GAME_STATE[user_id].get("current_intro_message_id")
-            if current_message_id:
-                intro_b2_text = load_system_prompt("game_texts/intro-B2.txt")
-                await context.bot.edit_message_text(
-                    chat_id=user_id,
-                    message_id=current_message_id,
-                    text=intro_b2_text,
-                    parse_mode='Markdown'
-                )
-                GAME_STATE[user_id]["current_language_level"] = "B2"
-                
-                # Update buttons - no "More Advanced" button for B2 level
-                keyboard = [
-                    [InlineKeyboardButton("Easier", callback_data="language__easier")],
-                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")]
-                ]
-                await context.bot.edit_message_reply_markup(
-                    chat_id=user_id,
-                    message_id=current_message_id,
-                    reply_markup=InlineKeyboardMarkup(keyboard)
-                )
-                
-                # Log the language level change
-                logger.info(f"User {user_id}: Changed language level to B2")
-            else:
-                logger.error(f"User {user_id}: No current intro message ID found for language change")
-        
-        elif sub_action == "perfect":
+        # Handle "perfect" first, as it's a terminal action in this flow
+        if sub_action == "perfect":
+            logger.info(f"User {user_id}: Language 'perfect' button clicked")
             # User is satisfied with current level, show confirmation and atmospheric start
             current_level = GAME_STATE[user_id].get("current_language_level", "B1")
+            logger.info(f"User {user_id}: Current language level is {current_level}")
+            
+            current_message_id = GAME_STATE[user_id].get("current_intro_message_id")
+            if current_message_id:
+                # Just remove buttons from the intro message, don't change text
+                try:
+                    await context.bot.edit_message_reply_markup(
+                        chat_id=user_id,
+                        message_id=current_message_id,
+                        reply_markup=None
+                    )
+                    logger.info(f"User {user_id}: Removed buttons from intro message")
+                except Exception as e:
+                    logger.warning(f"User {user_id}: Could not remove buttons from intro message: {e}")
             
             # Show level confirmation
-            confirmation_text = load_system_prompt("game_texts/level_confirmed.txt").replace("[LEVEL]", current_level)
-            logger.info(f"User {user_id}: Sending level confirmation: {confirmation_text}")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=confirmation_text,
-                parse_mode='Markdown'
-            )
-            logger.info(f"User {user_id}: Level confirmation sent successfully")
-            
-            # Send atmospheric photo with text
-            atmospheric_text = load_system_prompt("game_texts/atmospheric_start.txt")
             try:
+                confirmation_text = load_system_prompt("game_texts/level_confirmed.txt").replace("[LEVEL]", current_level)
+                logger.info(f"User {user_id}: Loaded confirmation text: {confirmation_text}")
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=confirmation_text,
+                    parse_mode='Markdown'
+                )
+                logger.info(f"User {user_id}: Level confirmation sent successfully")
+            except Exception as e:
+                logger.error(f"User {user_id}: Error sending level confirmation: {e}")
+            
+            # Send atmospheric photo with text and "Start Investigation" button
+            try:
+                atmospheric_text = load_system_prompt("game_texts/atmospheric_start.txt")
+                logger.info(f"User {user_id}: Loaded atmospheric text: {atmospheric_text}")
+                keyboard = [[InlineKeyboardButton("🕵️ Start Investigation!", callback_data="case_intro__begin")]]
+                
                 photo_path = "images/aric-cheng-7Bv9MrBan9s-unsplash.jpg"
                 logger.info(f"User {user_id}: Attempting to send photo from {photo_path}")
                 
@@ -780,44 +864,108 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                         chat_id=user_id,
                         photo=photo,
                         caption=atmospheric_text,
-                        parse_mode='Markdown'
+                        parse_mode='Markdown',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
                     )
-                logger.info(f"User {user_id}: Photo sent successfully")
+                logger.info(f"User {user_id}: Atmospheric photo sent successfully")
             except FileNotFoundError:
                 logger.error(f"User {user_id}: Photo file not found at {photo_path}")
                 # Fallback: send just the text without photo
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"🌃 {atmospheric_text}",
-                    parse_mode='Markdown'
-                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"🌃 {atmospheric_text}",
+                        parse_mode='Markdown',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    logger.info(f"User {user_id}: Atmospheric text sent successfully (no photo)")
+                except Exception as fallback_e:
+                    logger.error(f"User {user_id}: Error sending fallback atmospheric message: {fallback_e}")
             except Exception as e:
-                logger.error(f"User {user_id}: Error sending photo: {e}")
+                logger.error(f"User {user_id}: Error sending atmospheric photo: {e}")
                 # Fallback: send just the text without photo
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"🌃 {atmospheric_text}",
-                    parse_mode='Markdown'
-                )
-            
-            # Show how to play instructions
-            how_to_play_text = load_system_prompt("game_texts/onboarding_3_howtoplay.txt")
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=how_to_play_text,
-                parse_mode='Markdown'
-            )
-            
-            # Show start game button
-            keyboard = [[InlineKeyboardButton("🚀 Start Investigation!", callback_data="case_intro__begin")]]
-            await context.bot.send_message(
-                chat_id=user_id,
-                text="Ready to begin your investigation?",
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"🌃 {atmospheric_text}",
+                        parse_mode='Markdown',
+                        reply_markup=InlineKeyboardMarkup(keyboard)
+                    )
+                    logger.info(f"User {user_id}: Atmospheric text sent successfully (fallback)")
+                except Exception as fallback_e:
+                    logger.error(f"User {user_id}: Error sending fallback atmospheric message: {fallback_e}")
             
             # Log the language level confirmation
-            logger.info(f"User {user_id}: Confirmed language level {current_level}, showing atmospheric start, how to play, and start game button")
+            logger.info(f"User {user_id}: Confirmed language level {current_level}, showing atmospheric start with start button")
+            return
+
+        # Handle level changes ("easier" or "more_advanced")
+        current_level = state.get("current_language_level", "B1")
+        new_level = current_level
+
+        if sub_action == "easier":
+            if current_level == "B2":
+                new_level = "B1"
+            elif current_level == "B1":
+                new_level = "A2"
+        elif sub_action == "more_advanced":
+            if current_level == "A2":
+                new_level = "B1"
+            elif current_level == "B1":
+                new_level = "B2"
+
+        if new_level != current_level:
+            current_message_id = GAME_STATE[user_id].get("current_intro_message_id")
+            if not current_message_id:
+                logger.error(f"User {user_id}: No current intro message ID found for language change")
+                return
+
+            # Show loading animation
+            await context.bot.edit_message_text(
+                chat_id=user_id,
+                message_id=current_message_id,
+                text="🔄 Adjusting text difficulty...",
+                parse_mode='Markdown'
+            )
+            await asyncio.sleep(1.5)
+
+            # Determine text and keyboard for the new level
+            if new_level == "A2":
+                intro_text = load_system_prompt("game_texts/intro-A2.txt")
+                keyboard_layout = [
+                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")],
+                    [InlineKeyboardButton("More Advanced", callback_data="language__more_advanced")]
+                ]
+            elif new_level == "B2":
+                intro_text = load_system_prompt("game_texts/intro-B2.txt")
+                keyboard_layout = [
+                    [InlineKeyboardButton("Easier", callback_data="language__easier")],
+                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")]
+                ]
+            else:  # B1
+                intro_text = load_system_prompt("game_texts/intro-B1.txt")
+                keyboard_layout = [
+                    [InlineKeyboardButton("Easier", callback_data="language__easier")],
+                    [InlineKeyboardButton("Perfect!", callback_data="language__perfect")],
+                    [InlineKeyboardButton("More Advanced", callback_data="language__more_advanced")]
+                ]
+
+            # Update message text and keyboard
+            await context.bot.edit_message_text(
+                chat_id=user_id,
+                message_id=current_message_id,
+                text=intro_text,
+                parse_mode='Markdown'
+            )
+            await context.bot.edit_message_reply_markup(
+                chat_id=user_id,
+                message_id=current_message_id,
+                reply_markup=InlineKeyboardMarkup(keyboard_layout)
+            )
+
+            # Update state and log the change
+            GAME_STATE[user_id]["current_language_level"] = new_level
+            logger.info(f"User {user_id}: Changed language level from {current_level} to {new_level}")
 
     elif action_type == "language_menu":
         sub_action = parts[1]
@@ -844,7 +992,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             keyboard.append([InlineKeyboardButton("⬅️ Back to Language Menu", callback_data="language_menu__back")])
             
             await query.edit_message_text(
-                f"⚙️ **Text Difficulty Settings**\n\nCurrent level: **{current_level}**\n\nChoose your preferred difficulty level:\n\n🟢 **Light (A2)** - Simple vocabulary and grammar\n🟡 **Balanced (B1)** - Intermediate level, balanced complexity\n🔴 **Advanced (B2)** - More complex structures and vocabulary",
+                f"⚙️ **Text Difficulty Settings**\n\nCurrent level: **{current_level}**\n\nChoose your preferred difficulty level:\n\n🌱 **Light (A2)** - Simple vocabulary and grammar\n⚖️ **Balanced (B1)** - Intermediate level, balanced complexity\n🚀 **Advanced (B2)** - More complex structures and vocabulary",
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
@@ -937,13 +1085,46 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         
         elif sub_action == "evidence":
             keyboard = [
+                [InlineKeyboardButton("💡 Detective Guide", callback_data="guide__detective")],
                 [InlineKeyboardButton("Initial Report", callback_data="clue__1")],
                 [InlineKeyboardButton("The Weapon", callback_data="clue__2")],
                 [InlineKeyboardButton("The Note", callback_data="clue__3")],
                 [InlineKeyboardButton("The Apartment", callback_data="clue__4")],
                 [InlineKeyboardButton("⬅️ Back to Main Menu", callback_data="menu__main")]
             ]
-            await query.edit_message_text("Which piece of evidence do you want to examine?", reply_markup=InlineKeyboardMarkup(keyboard))
+            await query.edit_message_text("What would you like to examine?", reply_markup=InlineKeyboardMarkup(keyboard))
+
+    elif action_type == "guide":
+        sub_action = parts[1]
+        if sub_action == "detective":
+            # Log the guide viewing
+            log_message(user_id, "user_action", "Viewed Detective Guide", get_participant_code(user_id))
+            
+            # Send the detective guide image
+            try:
+                guide_path = "images/detective_guide.png"
+                with open(guide_path, "rb") as photo:
+                    await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=photo,
+                        caption="💡 **Detective Guide**\n\nHere are some ideas to get your investigation started!\n\n💬 **Pro tip**: People reveal more in private conversations than in group settings!",
+                        parse_mode='Markdown'
+                    )
+            except FileNotFoundError:
+                # Fallback if image not found
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="💡 **Detective Guide**\n\n🔹 Ask suspects where they were when Alex was found\n🔹 Find out what each person's relationship with Alex was\n🔹 Ask about the party - who came, what happened?\n🔹 Look for inconsistencies in their stories\n🔹 Ask about Alex's recent behavior or problems\n🔹 Find out who had access to Alex's apartment\n\n💬 **Pro tip**: People reveal more in private conversations than in group settings!",
+                    parse_mode='Markdown'
+                )
+            except Exception as e:
+                logger.error(f"Error sending detective guide: {e}")
+                # Fallback text
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="💡 **Detective Guide**\n\nSorry, there was an issue loading the guide image. Here are some starter questions:\n\n🔹 Ask suspects where they were when Alex was found\n🔹 Find out what each person's relationship with Alex was\n🔹 Ask about the party - who came, what happened?\n\n💬 **Pro tip**: People reveal more in private conversations than in group settings!",
+                    parse_mode='Markdown'
+                )
 
     elif action_type == "clue":
         clue_id = parts[1]
@@ -1024,11 +1205,79 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             # Delete the menu message
             await query.delete_message()
     
+    elif action_type == "reveal":
+        sub_action = parts[1]
+        
+        # Define reveal steps with their files and button texts
+        reveal_steps = [
+            {"file": "game_texts/reveal_1_truth.txt", "button": "So was it Pauline?"},
+            {"file": "game_texts/reveal_2_killer.txt", "button": "Show me the evidence"},
+            {"file": "game_texts/reveal_3_evidence.txt", "button": "How it happened?"},
+            {"file": "game_texts/reveal_4_timeline.txt", "button": "Ok, but why?"},
+            {"file": "game_texts/reveal_5_motive.txt", "button": None}  # Final step with no button
+        ]
+        
+        if sub_action == "start":
+            # Show first reveal message
+            state["reveal_step"] = 0
+            
+        elif sub_action == "next":
+            # Move to next reveal message
+            current_step = state.get("reveal_step", 0) + 1
+            state["reveal_step"] = current_step
+        else:
+            # Invalid sub_action, default to first step
+            state["reveal_step"] = 0
+        
+        # Get current step
+        current_step = state.get("reveal_step", 0)
+        
+        if current_step < len(reveal_steps):
+            step_data = reveal_steps[current_step]
+            try:
+                text = load_system_prompt(step_data["file"])
+                
+                if step_data["button"]:
+                    keyboard = [[InlineKeyboardButton(step_data["button"], callback_data="reveal__next")]]
+                    await query.edit_message_text(
+                        text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+                else:
+                    # Final message - show questionnaire after
+                    await query.edit_message_text(text, parse_mode='Markdown')
+                    
+                    # Show questionnaire after final reveal
+                    questionnaire_text = load_system_prompt("game_texts/outro_questionnaire.txt")
+                    keyboard = [[InlineKeyboardButton("📊 See Your Final English Report", callback_data="final__report")]]
+                    
+                    await query.message.reply_text(
+                        questionnaire_text,
+                        reply_markup=InlineKeyboardMarkup(keyboard),
+                        parse_mode='Markdown'
+                    )
+            except Exception as e:
+                logger.error(f"Failed to load reveal file {step_data['file']}: {e}")
+                await query.edit_message_text("🎭 The case is now closed. Thank you for playing!", parse_mode='Markdown')
+        else:
+            # All messages shown - shouldn't happen with new logic, but safety fallback
+            await query.edit_message_text("🎭 The case is now closed. Thank you for playing!", parse_mode='Markdown')
+            
+            await save_user_game_state(user_id)
+    
+    elif action_type == "restart":
+        sub_action = parts[1]
+        if sub_action == "game":
+            # Restart the game
+            await restart_command_handler(update, context)
+            return True
+    
     elif action_type == "final":
         sub_action = parts[1]
         if sub_action == "report":
-            # Show final progress report
-            await progress_report_handler(update, context, is_final_report=True)
+            # Show final progress report with tutor summary
+            await generate_final_english_report(update, context)
             
             # After showing the report, clean up everything
             await game_state_manager.delete_game_state(user_id)
@@ -1050,6 +1299,34 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             # Log the accusation initiation
             log_message(user_id, "user_action", "Clicked 'Make an Accusation' button", get_participant_code(user_id))
             
+            # Check if player is ready to make an accusation
+            is_ready, missing_info = is_player_ready_to_accuse(user_id)
+            
+            if is_ready:
+                # Player is ready - show normal accusation menu
+                info_text = load_system_prompt("game_texts/accuse_unlocked.txt")
+                keyboard = []
+                for key, data in CHARACTER_DATA.items():
+                    if key in SUSPECT_KEYS:
+                        keyboard.append([InlineKeyboardButton(f"{data['emoji']} Accuse {data['full_name']}", callback_data=f"accuse__confirm__{key}")])
+                keyboard.append([InlineKeyboardButton("⬅️ Nevermind, go back", callback_data="menu__main")])
+                await query.edit_message_text(info_text, reply_markup=InlineKeyboardMarkup(keyboard))
+            else:
+                # Player is not ready - show warning
+                warning_text = load_system_prompt("game_texts/accuse_warning.txt")
+                # Replace placeholder with specific missing info
+                warning_text = warning_text.replace("{missing_info}", missing_info)
+                
+                keyboard = [
+                    [InlineKeyboardButton("Yes, I'm sure - Make Accusation", callback_data="accuse__force")],
+                    [InlineKeyboardButton("You're right, let me investigate more", callback_data="menu__main")]
+                ]
+                await query.edit_message_text(warning_text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='Markdown')
+
+        elif sub_action == "force":
+            # Player insists on making accusation despite warning
+            log_message(user_id, "user_action", "Insisted on making accusation despite warning", get_participant_code(user_id))
+            
             info_text = load_system_prompt("game_texts/accuse_unlocked.txt")
             keyboard = []
             for key, data in CHARACTER_DATA.items():
@@ -1065,10 +1342,14 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             char_name = CHARACTER_DATA[accused_key]['full_name']
             log_message(user_id, "user_action", f"Confirmed accusation against {char_name}", get_participant_code(user_id))
             
-            state["waiting_for_accusation_reason"] = True
-            state["accused_character"] = accused_key
+            # Show attempt number (max 2 attempts)
+            attempt_number = state.get("accusation_attempts", 0) + 1
+            attempts_text = f" (Attempt {attempt_number}/2)" if attempt_number > 1 else ""
             
-            await query.edit_message_text(f"🎙️ _All eyes turn to {char_name}. You take a deep breath. Now, explain to everyone why you believe this person is guilty. This is your moment to prove you are right._", parse_mode='Markdown')
+            await query.edit_message_text(f"🎙️ _You point at {char_name}. All eyes turn to them.{attempts_text}_", parse_mode='Markdown')
+            
+            # Process accusation immediately without asking for explanation
+            await handle_accusation_direct(update, context, user_id, accused_key)
 
     elif action_type == "case_intro":
         logger.info(f"User {user_id}: case_intro action triggered with sub_action: {parts[1]}")
@@ -1115,19 +1396,64 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 # Fallback to default text
                 suspects_text = "👥 FOUR PEOPLE ARE IN THE APARTMENT\n\nNobody can leave until you complete your investigation."
             
-            # Send new message with suspects text (no button)
-            await context.bot.send_message(
-                chat_id=user_id,
-                text=suspects_text,
-                parse_mode='Markdown'
-            )
+            # Send photo with suspects text as caption
+            try:
+                photo_path = "images/suspects.png"
+                logger.info(f"User {user_id}: Attempting to send photo from {photo_path}")
+                
+                with open(photo_path, "rb") as photo:
+                    await context.bot.send_photo(
+                        chat_id=user_id,
+                        photo=photo,
+                        caption=suspects_text,
+                        parse_mode='Markdown'
+                    )
+                logger.info(f"User {user_id}: Suspects photo sent successfully")
+            
+            except FileNotFoundError:
+                logger.error(f"User {user_id}: Photo file not found at {photo_path}")
+                # Fallback: send just the text without photo
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=suspects_text,
+                    parse_mode='Markdown'
+                )
+            
+            except Exception as e:
+                logger.error(f"User {user_id}: Error sending suspects photo: {e}")
+                # Fallback: send just the text without photo
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=suspects_text,
+                    parse_mode='Markdown'
+                )
             
             # Remove button from previous message
             await query.edit_message_reply_markup(reply_markup=None)
             
+            # Add "How to play?" button
+            keyboard = [[InlineKeyboardButton("🎮 How to play?", callback_data="case_intro__how_to_play")]]
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🧩 Ready to start the game?",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+        elif sub_action == "how_to_play":
+            # Remove the "How to play?" button
+            await query.edit_message_reply_markup(reply_markup=None)
+
+            # Show how to play instructions
+            how_to_play_text = load_system_prompt("game_texts/onboarding_3_howtoplay.txt")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=how_to_play_text,
+                parse_mode='Markdown'
+            )
+            
             # Add persistent keyboard for game menu and language learning
             persistent_keyboard = [
-                [KeyboardButton("🔍 Game Menu"), KeyboardButton("📚 Language Learning Menu")]
+                [KeyboardButton("🔍 Game Menu"), KeyboardButton("� Learning Menu")]
             ]
             reply_markup = ReplyKeyboardMarkup(persistent_keyboard, resize_keyboard=True)
             
@@ -1136,10 +1462,23 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
                 text="Game menu and language learning options are now available on the panel below 👇",
                 reply_markup=reply_markup
             )
-            
+
         elif sub_action == "begin":
             # Show the first case introduction (this is called from the Start Investigation button)
             logger.info(f"User {user_id}: Starting case introduction sequence")
+            
+            # Record game start time
+            GAME_STATE[user_id]["game_start_time"] = time.time()
+            logger.info(f"User {user_id}: Game start time recorded")
+            
+            # Save state with game start time
+            await save_user_game_state(user_id)
+            
+            # Schedule post-test message after 1 hour
+            post_test_delay = 3600  # 1 hour in seconds
+            asyncio.create_task(schedule_post_test_message(user_id, context, post_test_delay))
+            logger.info(f"User {user_id}: Post-test message scheduled for {post_test_delay} seconds later")
+            
             try:
                 case_intro_1_text = load_system_prompt("game_texts/case_intro_1_call.txt")
                 logger.info(f"User {user_id}: Successfully loaded case_intro_1_text: {case_intro_1_text[:100]}...")
@@ -1168,40 +1507,91 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
 
 # --- Вспомогательные функции для обработчиков ---
 
-async def handle_accusation(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, user_text: str):
-    """Handles the final accusation and ends the game."""
+
+
+async def handle_accusation_direct(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, accused_key: str):
+    """Handles accusation directly without asking for explanation."""
     state = GAME_STATE[user_id]
-    state["waiting_for_accusation_reason"] = False
-    accused_key = state.get("accused_character")
+    
+    # Increment attempt counter
+    state["accusation_attempts"] += 1
 
-    # Безопасно запускаем фоновую задачу
-    try:
-        asyncio.create_task(analyze_and_log_text(user_id, user_text))
-    except Exception as e:
-        logger.error(f"Failed to create asyncio task for analyze_and_log_text: {e}")
+    # Note: We don't analyze button clicks as these are not user-written text
 
-    outro_text = load_system_prompt("game_texts/outro_win.txt") if accused_key == 'tim' else load_system_prompt("game_texts/outro_lose.txt")
-    
-    await update.message.reply_text(outro_text, parse_mode='Markdown')
-    await asyncio.sleep(2)
-    
-    # Send the questionnaire text
-    questionnaire_text = load_system_prompt("game_texts/outro_questionnaire.txt")
-    
-    # Create inline keyboard with final report button
-    keyboard = [[InlineKeyboardButton("📊 See Your Final English Report", callback_data="final__report")]]
-    
-    await update.message.reply_text(
-        questionnaire_text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='Markdown'
-    )
-    
-    # Mark game as completed but keep state for final report
-    state["game_completed"] = True
-    await save_user_game_state(user_id)
-    
-    return True
+    # Check if the accusation is correct (Tim is the killer)
+    if accused_key == 'tim':
+        # Correct accusation - player wins
+        outro_text = load_system_prompt("game_texts/outro_win.txt")
+        
+        await asyncio.sleep(1)  # Brief pause for drama
+        await update.callback_query.message.reply_text(outro_text, parse_mode='Markdown')
+        await asyncio.sleep(2)
+        
+        # Send the questionnaire text
+        questionnaire_text = load_system_prompt("game_texts/outro_questionnaire.txt")
+        
+        # Create inline keyboard with final report button
+        keyboard = [[InlineKeyboardButton("📊 See Your Final English Report", callback_data="final__report")]]
+        
+        await update.callback_query.message.reply_text(
+            questionnaire_text,
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode='Markdown'
+        )
+        
+        # Mark game as completed but keep state for final report
+        state["game_completed"] = True
+        await save_user_game_state(user_id)
+        
+    else:
+        # Wrong accusation - always show defense first
+        defense_text = load_system_prompt(f"game_texts/defense_{accused_key}.txt")
+        
+        await asyncio.sleep(1)  # Brief pause for drama
+        await update.callback_query.message.reply_text(defense_text, parse_mode='Markdown')
+        
+        if state["accusation_attempts"] >= 2:
+            # Second wrong attempt - show game over after defense
+            await asyncio.sleep(3)  # Longer pause to let player read the defense
+            
+            outro_text = load_system_prompt("game_texts/outro_lose.txt")
+            
+            # Create keyboard based on outro_lose.txt instructions
+            keyboard = [
+                [InlineKeyboardButton("📖 Yes, show me", callback_data="reveal__start")],
+                [InlineKeyboardButton("🔄 Start again", callback_data="restart__game")]
+            ]
+            
+            await update.callback_query.message.reply_text(
+                outro_text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+            
+            # Mark game as completed but keep state for final report
+            state["game_completed"] = True
+            await save_user_game_state(user_id)
+            
+        else:
+            # First wrong attempt - show options for second chance
+            await asyncio.sleep(2)  # Pause to let player read the defense
+            
+            # Create keyboard with options for second attempt
+            keyboard = [
+                [InlineKeyboardButton("🔄 Make Another Accusation", callback_data="accuse__init")],
+                [InlineKeyboardButton("🔍 Continue Investigation", callback_data="menu__main")]
+            ]
+            
+            await update.callback_query.message.reply_text(
+                "What would you like to do next?",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Reset accusation state but keep attempt counter
+            state["accused_character"] = None
+            await save_user_game_state(user_id)
+
+
 
 async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, scene_action: dict):
     """Executes a single action from a scene (e.g., character reply, character reaction)."""
@@ -1209,7 +1599,23 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
     data = scene_action.get("data", {})
     state = GAME_STATE[user_id]
 
-    if action in ["character_reply", "character_reaction"]:
+    if action == "director_note":
+        # Handle director narrative/guidance message
+        message = data.get("message", "The investigation continues...")
+        logger.info(f"User {user_id}: Sending director note: '{message[:50]}...'")
+        
+        # Format as a narrative message
+        formatted_message = f"🎬 *Narrator:* _{message}_"
+        
+        try:
+            await update.message.reply_text(formatted_message, parse_mode='Markdown')
+            logger.info(f"User {user_id}: Successfully sent director note.")
+        except Exception as e:
+            logger.error(f"User {user_id}: Failed to send director note: {e}")
+            # Fallback without formatting
+            await update.message.reply_text(message)
+        
+    elif action in ["character_reply", "character_reaction"]:
         char_key = data.get("character_key")
         trigger_msg = data.get("trigger_message")
         if char_key in CHARACTER_DATA and trigger_msg:
@@ -1264,8 +1670,7 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
                 except Exception as fallback_error:
                     logger.error(f"User {user_id}: Failed to send fallback message for empty reply: {fallback_error}")
 
-            # Log the character's response (for both reply and reaction)
-            log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
+            # Character response already logged above in the try block
             
             if char_key not in state["topic_memory"]["spoken"]:
                 state["topic_memory"]["spoken"].append(char_key)
@@ -1316,6 +1721,84 @@ async def process_director_decision(update: Update, context: ContextTypes.DEFAUL
         await execute_scene_action(update, context, user_id, scene_action)
 
 
+async def check_and_schedule_post_test_message(user_id: int, context: ContextTypes.DEFAULT_TYPE):
+    """Check if post-test message should be scheduled for restored game state."""
+    if user_id not in GAME_STATE:
+        return
+        
+    state = GAME_STATE[user_id]
+    game_start_time = state.get("game_start_time")
+    
+    if not game_start_time or state.get("game_completed", False):
+        return
+    
+    # Calculate how much time has passed since game start
+    current_time = time.time()
+    elapsed_time = current_time - game_start_time
+    
+    post_test_delay = 3600
+    
+    if elapsed_time >= post_test_delay:
+        # Post-test should have been sent already, send immediately
+        logger.info(f"User {user_id}: Post-test message overdue, sending immediately")
+        asyncio.create_task(schedule_post_test_message(user_id, context, 0))
+    else:
+        # Calculate remaining time until post-test should be sent
+        remaining_time = post_test_delay - elapsed_time
+        logger.info(f"User {user_id}: Post-test message scheduled for {remaining_time:.0f} seconds from now")
+        asyncio.create_task(schedule_post_test_message(user_id, context, remaining_time))
+
+
+async def schedule_post_test_message(user_id: int, context: ContextTypes.DEFAULT_TYPE, delay_seconds: float = 3600):
+    """Schedules the post-test message to be sent after the specified delay."""
+    try:
+        # Wait for the specified delay
+        await asyncio.sleep(delay_seconds)
+        
+        # Check if user still has active game state
+        if user_id not in GAME_STATE:
+            logger.info(f"User {user_id}: Post-test message cancelled - no active game state")
+            return
+            
+        # Check if game was completed (if so, don't send post-test)
+        if GAME_STATE[user_id].get("game_completed", False):
+            logger.info(f"User {user_id}: Post-test message cancelled - game already completed")
+            return
+        
+        # Load post-test message
+        try:
+            post_test_text = load_system_prompt("game_texts/post-test.txt")
+        except Exception as e:
+            logger.error(f"User {user_id}: Failed to load post-test.txt: {e}")
+            post_test_text = "📋 Second questionnaire is now available.\n\nComplete it now or continue playing and fill it out later. Thank you!\n\nLink: https://forms.gle/zd6dsxFDgGHp5TxK9\n\n(This message stays pinned so you won't lose the link)"
+        
+        # Send the message
+        message = await context.bot.send_message(
+            chat_id=user_id,
+            text=post_test_text,
+            parse_mode='Markdown'
+        )
+        
+        # Pin the message
+        try:
+            await context.bot.pin_chat_message(
+                chat_id=user_id,
+                message_id=message.message_id
+            )
+            logger.info(f"User {user_id}: Post-test message sent and pinned successfully")
+        except Exception as e:
+            logger.error(f"User {user_id}: Failed to pin post-test message: {e}")
+            logger.info(f"User {user_id}: Post-test message sent but not pinned")
+            
+        # Log the message send
+        log_message(user_id, "system", "Post-test questionnaire message sent", get_participant_code(user_id))
+        
+    except asyncio.CancelledError:
+        logger.info(f"User {user_id}: Post-test message task was cancelled")
+    except Exception as e:
+        logger.error(f"User {user_id}: Error in post-test message scheduling: {e}")
+
+
 # --- Основной обработчик сообщений ---
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1355,6 +1838,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data")
+            
+            # Check if post-test message should be scheduled for restored game
+            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+            
             # Continue processing the message with restored state
         else:
             # Delete the typing message
@@ -1376,14 +1863,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check if waiting for participant code
     if state.get("waiting_for_participant_code"):
-        # Validate participant code format (e.g., AN0842)
-        if len(user_text) == 6 and user_text[:2].isalpha() and user_text[2:4].isdigit() and user_text[4:6].isdigit():
+        # Validate participant code format (e.g., AN0842) or TEST for testers
+        is_valid_regular_code = (len(user_text) == 6 and user_text[:2].isalpha() and 
+                                user_text[2:4].isdigit() and user_text[4:6].isdigit())
+        is_test_code = user_text.upper() == "TEST"
+        
+        if is_valid_regular_code or is_test_code:
             # Store participant code
             state["participant_code"] = user_text.upper()
             state["waiting_for_participant_code"] = False
             
             # Continue with language level selection
-            keyboard = [[InlineKeyboardButton("🎯 Choose Language Level", callback_data="onboarding__step4")]]
+            keyboard = [[InlineKeyboardButton("🎯 Find Your Language Level", callback_data="onboarding__step4")]]
             language_level_text = load_system_prompt("game_texts/onboarding_4_language_level.txt")
             await update.message.reply_text(
                 language_level_text, 
@@ -1406,10 +1897,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    if state.get("waiting_for_accusation_reason"):
-        if await handle_accusation(update, context, user_id, user_text):
-            logger.info(f"--- handle_message END for user {user_id} (accusation handled) ---")
-            return
+
 
     if state.get("waiting_for_word"):
         await send_tutor_explanation(update, context, user_text)

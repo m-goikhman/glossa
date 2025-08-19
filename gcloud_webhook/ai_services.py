@@ -63,6 +63,42 @@ async def ask_tutor_for_explanation(user_id: int, text_to_explain: str, original
         log_message(user_id, "tutor_error", f"Could not parse tutor explanation JSON: {e}", None)
         return {}
 
+async def ask_tutor_for_final_summary(user_id: int, progress_data: dict) -> dict:
+    """A special function that calls the Tutor for final learning summary and expects a JSON response."""
+    from config import CHARACTER_DATA
+    tutor_prompt = load_system_prompt(CHARACTER_DATA["tutor"]["prompt_file"])
+    
+    # Prepare summary of user's progress
+    words_learned = progress_data.get("words_learned", [])
+    writing_feedback = progress_data.get("writing_feedback", [])
+    
+    # Handle cases with no errors/words differently
+    if not words_learned and not writing_feedback:
+        summary_request = f"Generate final learning summary. User completed the game with no new words learned and no writing errors that needed correction. This means they played excellently! Please congratulate them and suggest they might be ready for a more challenging difficulty level."
+    else:
+        summary_request = f"Generate final learning summary. User learned {len(words_learned)} words"
+        
+        if words_learned:
+            summary_request += f" (words: {', '.join([entry['query'] for entry in words_learned[:5]])}{'...' if len(words_learned) > 5 else ''})"
+        
+        if writing_feedback:
+            summary_request += f" and received {len(writing_feedback)} pieces of feedback on their writing"
+            # Add examples of common mistakes for analysis
+            feedback_examples = [entry['feedback'] for entry in writing_feedback[:3]]
+            if feedback_examples:
+                summary_request += f". Recent feedback included: {'; '.join(feedback_examples)}"
+        
+        summary_request += ". Please provide a warm summary using the good-areas to improve-good structure."
+    
+    messages = [{"role": "system", "content": tutor_prompt}, {"role": "user", "content": summary_request}]
+    try:
+        chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.7)
+        response_text = chat_completion.choices[0].message.content
+        return json.loads(response_text)
+    except (json.JSONDecodeError, Exception) as e:
+        log_message(user_id, "tutor_error", f"Could not parse tutor final summary JSON: {e}", None)
+        return {"summary": "Great job completing the game! You showed curiosity and engagement with English. Keep practicing and you'll continue to improve!"}
+
 
 async def ask_word_spotter(text_to_analyze: str) -> list:
     """Asks the Word Spotter AI to find difficult words in a text."""
@@ -78,6 +114,32 @@ async def ask_word_spotter(text_to_analyze: str) -> list:
 
 async def ask_director(user_id: int, context_text: str, message: str) -> dict:
     """Asks the Director LLM for the next scene and returns it as a dictionary."""
+    from predefined_responses import try_predefined_response
+    from config import GAME_STATE
+    
+    # First, try to get a predefined response based on keywords
+    try:
+        print(f"DEBUG: Checking predefined responses for user {user_id}, message: '{message}'")
+        state = GAME_STATE.get(user_id, {})
+        topic_memory = state.get("topic_memory", {"topic": "None", "spoken": []})
+        print(f"DEBUG: Topic memory for user {user_id}: {topic_memory}")
+        
+        predefined_response = try_predefined_response(user_id, message, topic_memory)
+        print(f"DEBUG: Predefined response result for user {user_id}: {predefined_response is not None}")
+        
+        if predefined_response:
+            print(f"DEBUG: Using predefined response for user {user_id}: {predefined_response}")
+            log_message(user_id, "director_predefined", f"Used predefined response for message: {message[:100]}", None)
+            return predefined_response
+        else:
+            print(f"DEBUG: No predefined response found for user {user_id}, falling back to AI director")
+    except Exception as e:
+        print(f"WARNING: Failed to check predefined responses for user {user_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        # Continue to AI director as fallback
+    
+    # Fallback to AI Director
     director_prompt = load_system_prompt("prompts/prompt_director.md")
     full_context_for_director = f"Context: \"{context_text}\"\nMessage: \"{message}\""
     director_messages = [{"role": "system", "content": director_prompt}, {"role": "user", "content": full_context_for_director}]

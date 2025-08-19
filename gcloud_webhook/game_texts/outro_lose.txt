@@ -1,9 +1,5 @@
-**Wrong Choice** ⏳
+😔 You've used all your attempts.
 
-Something feels wrong.
-Faces show confusion, surprise… and someone looks quietly relieved.
-Outside, the city keeps moving.
-Alex Martin fights for his life in the hospital.
+Would you like to know who really did it?
 
-Game over.
-Tonight, the attacker walks free.
+[📖 Yes, show me] [🔄 Start again]
