@@ -96,7 +96,7 @@ gcloud app deploy --project=YOUR_PROJECT_ID
 - **In-Memory Cache**: System prompts and active game states
 
 ### Security Features
-- **No PII Logging**: User messages are sanitized and truncated in logs
+- **Complete Message Logging**: All messages are logged in full for research and analysis purposes
 - **Secure Secret Management**: API keys stored in Google Secret Manager
 - **Environment Variable Fallback**: Secure local development support
 
@@ -161,7 +161,7 @@ This project was developed in close collaboration with an AI assistant. The core
 
 ## 🔒 Privacy & Security
 - **No PII Collection**: Personal information is not collected or stored
-- **Sanitized Logging**: User messages are truncated and sanitized
+- **Complete Logging**: All messages are logged in full for comprehensive data analysis
 - **Secure Storage**: All data stored in Google Cloud with proper access controls
 - **Environment Isolation**: Development and production configurations are separate
 
@@ -169,6 +169,7 @@ This project was developed in close collaboration with an AI assistant. The core
 - Original Murder Mystery Game: "The Business of Murder" by John H. Kim
 - Original Source: https://www.darkshire.net/jhkim/rpg/murder/business.html
 - Used with permission from the author for chatbot experimentation
+- Background image (`images/aric-cheng-7Bv9MrBan9s-unsplash.jpg`): Photo by Aric Cheng, freely available on Unsplash
 
 ## 📄 License
 MIT License - See LICENSE file for details

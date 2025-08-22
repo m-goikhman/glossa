@@ -31,12 +31,9 @@ def log_message(user_id: int, role: str, content: str, participant_code: str = N
         return
 
     try:
-        # Sanitize content to remove any potential personal information
-        if role == "user" and len(content) > 100:
-            # Truncate long user messages to prevent logging personal info
-            sanitized_content = content[:100] + "... [truncated]"
-        else:
-            sanitized_content = content
+        # Log all messages in full without any truncation
+        # This ensures complete data capture for both research and regular logs
+        sanitized_content = content
 
         # Use participant code if available, otherwise fall back to user_id
         if participant_code:
