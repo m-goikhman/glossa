@@ -1,6 +1,4 @@
-🤔 You: "Ronnie Snapper, you attacked Alex!"
-
-😤 Ronnie: "Seriously, detective? I arrived last, at 9:10. 
+😎 Ronnie: "Seriously, detective? I arrived last, at 9:10. 
 Ask anyone! And that blue Honda on the corner - that's not mine. 
 I drive a Tesla, if you haven't noticed. Alex was a good investment - why would I hurt someone who pays me back reliably?"
 
@@ -8,5 +6,3 @@ I drive a Tesla, if you haven't noticed. Alex was a good investment - why would 
 And indeed, whose Honda is that parked illegally outside?_
 
 ❌ This is not Ronnie. I have **1 more attempt** left.
-
-[Make Another Accusation] [Continue Investigation]

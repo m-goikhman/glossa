@@ -10,4 +10,4 @@ HOW TO PLAY
 
 📒 **Explain difficult words** - Get simple definitions from AI
 
-📚 **Language Learning Menu** – Check your progress and adjust text difficulty (Light/Balanced/Advanced)
+✍️ **Learning Menu** – Check your progress and adjust text difficulty (Light/Balanced/Advanced)

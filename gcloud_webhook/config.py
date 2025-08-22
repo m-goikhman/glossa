@@ -51,9 +51,12 @@ CHARACTER_DATA = {
     "ronnie": {"prompt_file": "prompts/prompt_ronnie.md", "full_name": "Ronnie Snapper", "emoji": "😎"},
     "tutor": {"prompt_file": "prompts/prompt_tutor.md", "full_name": "English Tutor", "emoji": "🧑‍🏫"},
     "narrator": {"prompt_file": "prompts/prompt_narrator.md", "full_name": "Narrator", "emoji": "🎙️"},
+    "director": {"prompt_file": "prompts/prompt_director.md", "full_name": "Game Director", "emoji": "🎬"},
+    "lexicographer": {"prompt_file": "prompts/prompt_lexicographer.md", "full_name": "Lexicographer", "emoji": "📖"},
 }
 
 # --- Global State Variables ---
 GAME_STATE = {}
 user_histories = {}
 message_cache = {}
+POST_TEST_TASKS = {}  # stores user_id -> asyncio.Task for post-test scheduling

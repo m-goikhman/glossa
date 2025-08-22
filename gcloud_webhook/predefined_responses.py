@@ -341,24 +341,10 @@ def try_predefined_response(user_id: int, message: str, topic_memory: Dict) -> O
     print(f"DEBUG PREDEFINED: Available characters for user {user_id}: {available_characters}")
     
     if not available_characters:
-        # Все персонажи уже говорили на эту тему - возвращаем director_note
-        print(f"DEBUG PREDEFINED: All characters have spoken on topic {detected_topic}, returning director note")
-        
-        director_messages = {
-            "christmas_card": "Everyone has shared what they know about the Christmas card. You might want to examine other evidence or explore different aspects of the investigation.",
-            "usb_drive": "The group has told you everything they know about the USB drive. Perhaps you should focus on other clues or ask about motives and relationships.",
-            "alibi_845": "All alibis for 8:45 PM have been provided. Consider examining the timeline more closely or investigating other evidence.",
-            "money_debt": "Everyone has shared their knowledge about Alex's financial troubles. You might want to explore how this connects to other evidence.",
-            "arrival_time": "Everyone has provided details about their arrival at Alex's apartment. You might want to examine how this information connects to the timeline of events.",
-            "party_evening": "The party has been thoroughly discussed. Perhaps it's time to focus on specific evidence or explore motives for the murder."
-        }
-        
-        message = director_messages.get(detected_topic, "Everyone has shared what they know about this topic. You might want to explore other angles of the investigation.")
-        
-        return {
-            "scene": [{"action": "director_note", "data": {"message": message}}],
-            "new_topic": f"Investigation direction after {topic_name}"
-        }
+        # Все персонажи уже говорили на эту тему, но возможно игрок задает новый связанный вопрос
+        # Позволяем режиссёру решить, стоит ли отвечать или действительно пора переходить к другой теме
+        print(f"DEBUG PREDEFINED: All characters have spoken on topic {detected_topic}, letting director decide")
+        return None
     
     # Выбираем персонажей для ответа в зависимости от стратегии
     print(f"DEBUG PREDEFINED: Using strategy '{response_strategy}' for topic '{detected_topic}'")

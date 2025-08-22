@@ -1,6 +1,4 @@
-🤔 You: "Pauline Thompson, you attacked Alex!"
-
-😤 Pauline: "Detective, think logically! I drove Alex here from the party. 
+💼 *Pauline*: "Detective, think logically! I drove Alex here from the party. 
 If I wanted to hurt him, why would I bring him to his own apartment where people were coming?
 I found him unconscious and screamed for help. Check the timeline - I was looking for parking for 15 minutes!"
 
@@ -8,5 +6,3 @@ I found him unconscious and screamed for help. Check the timeline - I was lookin
 And several witnesses confirm she drove him from the party._
 
 ❌ This is not Pauline. I have **1 more attempt** left.
-
-[Make Another Accusation] [Continue Investigation]

@@ -18,7 +18,7 @@ import traceback # Добавляем импорт traceback
 
 from config import TELEGRAM_TOKEN
 from privacy_config import sanitize_log_data
-from bot_handlers import (
+from handlers import (
     start_command_handler,
     restart_command_handler,
     update_keyboard_handler,
@@ -57,7 +57,7 @@ async def startup_event():
         ptb_app.add_handler(CommandHandler("menu", show_main_menu_handler))
         ptb_app.add_handler(CommandHandler("progress", progress_report_handler))
         ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^🔍 Game Menu$'), show_main_menu_handler))
-        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📖 Learning Menu$'), show_language_learning_menu_handler))
+        ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^✍️ Learning Menu$'), show_language_learning_menu_handler))
         ptb_app.add_handler(MessageHandler(filters.TEXT & filters.Regex(r'^📊 Language Progress$'), show_language_learning_menu_handler))
         # Move CallbackQueryHandler before the general MessageHandler to ensure button clicks are processed first
         ptb_app.add_handler(CallbackQueryHandler(button_callback_handler))
