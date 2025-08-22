@@ -157,7 +157,7 @@ class GameStateManager:
                 # Handle nested topic_memory structure
                 topic_memory = {}
                 for topic_key, topic_value in value.items():
-                    if topic_key == "spoken" and isinstance(topic_value, list):
+                    if topic_key in ["spoken", "predefined_used"] and isinstance(topic_value, list):
                         topic_memory[topic_key] = topic_value  # Keep as list for topic_memory
                     else:
                         topic_memory[topic_key] = topic_value

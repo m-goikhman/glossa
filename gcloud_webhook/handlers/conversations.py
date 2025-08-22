@@ -37,7 +37,7 @@ async def handle_private_character_conversation(update: Update, context: Context
     system_prompt = combine_character_prompt(char_key, current_language_level)
     
     # Create a context-aware trigger for the character
-    topic_memory = state.get("topic_memory", {"topic": "None", "spoken": []})
+    topic_memory = state.get("topic_memory", {"topic": "None", "spoken": [], "predefined_used": []})
     context_trigger = f"The detective is asking you a question: '{user_text}'. Current topic: {topic_memory.get('topic', 'None')}. Respond as your character."
     
     logger.info(f"User {user_id}: Direct character conversation with '{char_key}'")
@@ -252,7 +252,7 @@ async def process_director_decision(update: Update, context: ContextTypes.DEFAUL
     """Gets a decision from the director and executes the resulting scene for PUBLIC conversations only."""
     state = GAME_STATE[user_id]
     current_mode = state.get("mode", "public")
-    topic_memory = state.get("topic_memory", {"topic": "None", "spoken": []})
+    topic_memory = state.get("topic_memory", {"topic": "None", "spoken": [], "predefined_used": []})
 
     # This function now only handles public mode
     if current_mode != "public":
@@ -273,7 +273,11 @@ async def process_director_decision(update: Update, context: ContextTypes.DEFAUL
 
     state["topic_memory"]["topic"] = new_topic
     if new_topic != topic_memory.get("topic"):
+        # Reset spoken list but preserve predefined_used when topic changes
         state["topic_memory"]["spoken"] = []
+        # Ensure predefined_used field exists
+        if "predefined_used" not in state["topic_memory"]:
+            state["topic_memory"]["predefined_used"] = []
         # Save state when topic changes
         await save_user_game_state(user_id)
 

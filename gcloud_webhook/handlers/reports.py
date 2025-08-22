@@ -147,6 +147,7 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
         keyboard = [[InlineKeyboardButton("⬅️ Back to Language Menu", callback_data="language_menu__back")]]
         await context.bot.send_message(
             chat_id=user_id,
+            text="📊",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 

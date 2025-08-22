@@ -252,6 +252,22 @@ def get_characters_who_can_respond(topic_key: str, topic_memory: Dict) -> List[s
     
     return available_characters
 
+def _mark_predefined_as_used(user_id: int, topic_key: str):
+    """
+    Маркирует предопределённый ответ как использованный в состоянии игры.
+    """
+    from config import GAME_STATE
+    
+    if user_id in GAME_STATE:
+        topic_memory = GAME_STATE[user_id].get("topic_memory", {})
+        predefined_used = topic_memory.get("predefined_used", [])
+        
+        if topic_key not in predefined_used:
+            predefined_used.append(topic_key)
+            topic_memory["predefined_used"] = predefined_used
+            GAME_STATE[user_id]["topic_memory"] = topic_memory
+            print(f"DEBUG PREDEFINED: Marked topic '{topic_key}' as used for user {user_id}")
+
 def create_predefined_response(topic_key: str, character_keys: List[str], topic_memory: Dict) -> Dict[str, Any]:
     """
     Создаёт предопределённый ответ-сцену для одного или нескольких персонажей.
@@ -293,14 +309,21 @@ def try_predefined_response(user_id: int, message: str, topic_memory: Dict) -> O
         print(f"DEBUG PREDEFINED: No topic detected for user {user_id}")
         return None
     
-    # Если тема изменилась, создаём чистую память для новой темы
-    current_topic = topic_memory.get("topic", "None")
+    # Проверяем, использовался ли уже predefined response для этой темы
+    predefined_used = topic_memory.get("predefined_used", [])
     topic_data = KEYWORD_PATTERNS[detected_topic]
     topic_name = topic_data["topic_name"]
     
+    if detected_topic in predefined_used:
+        print(f"DEBUG PREDEFINED: Predefined response for topic '{detected_topic}' already used for user {user_id}, skipping")
+        return None
+    
+    # Если тема изменилась, создаём чистую память для новой темы
+    current_topic = topic_memory.get("topic", "None")
+    
     if current_topic != topic_name:
-        # Новая тема - сбрасываем список говоривших
-        adjusted_topic_memory = {"topic": topic_name, "spoken": []}
+        # Новая тема - сбрасываем список говоривших, но сохраняем predefined_used
+        adjusted_topic_memory = {"topic": topic_name, "spoken": [], "predefined_used": predefined_used}
         print(f"DEBUG PREDEFINED: Topic changed from '{current_topic}' to '{topic_name}', resetting spoken list")
     else:
         adjusted_topic_memory = topic_memory
@@ -322,8 +345,10 @@ def try_predefined_response(user_id: int, message: str, topic_memory: Dict) -> O
                 "new_topic": f"Investigation direction after {topic_name}"
             }
         else:
-            # Show the full ordered sequence
+            # Show the full ordered sequence and mark as used
             result = create_predefined_response(detected_topic, [], adjusted_topic_memory)
+            # Mark this predefined response as used
+            _mark_predefined_as_used(user_id, detected_topic)
             print(f"DEBUG PREDEFINED: Final response for user {user_id}: {result}")
             return result
     
@@ -334,7 +359,10 @@ def try_predefined_response(user_id: int, message: str, topic_memory: Dict) -> O
     if specific_character:
         # Игрок обращается к конкретному персонажу
         if specific_character in KEYWORD_PATTERNS[detected_topic]["characters_priority"]:
-            return create_predefined_response(detected_topic, [specific_character], adjusted_topic_memory)
+            result = create_predefined_response(detected_topic, [specific_character], adjusted_topic_memory)
+            # Mark this predefined response as used
+            _mark_predefined_as_used(user_id, detected_topic)
+            return result
     
     # Игрок задаёт общий вопрос - выбираем всех подходящих персонажей для ответа
     available_characters = get_characters_who_can_respond(detected_topic, adjusted_topic_memory)
@@ -357,5 +385,7 @@ def try_predefined_response(user_id: int, message: str, topic_memory: Dict) -> O
         print(f"DEBUG PREDEFINED: Strategy 'random_one', chosen character for user {user_id}: {chosen_characters[0]}")
     
     result = create_predefined_response(detected_topic, chosen_characters, adjusted_topic_memory)
+    # Mark this predefined response as used
+    _mark_predefined_as_used(user_id, detected_topic)
     print(f"DEBUG PREDEFINED: Final response for user {user_id}: {result}")
     return result
