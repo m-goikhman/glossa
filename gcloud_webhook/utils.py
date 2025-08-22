@@ -3,6 +3,7 @@ import datetime
 import json
 import tempfile
 import re
+from typing import Optional
 from google.cloud import storage
 from config import GCS_BUCKET_NAME
 storage_client = None
@@ -193,6 +194,40 @@ def write_log_entry(user_id: int, entry_type: str, query: str, feedback: str = "
         print(f"[WARNING] Could not access progress log file for user {user_id}: {e}")
     except Exception as e:
         print(f"[ERROR] Unexpected error in write_log_entry for user {user_id}: {e}")
+
+def save_message_to_cache(message_id: int, text: str, character_key: str = None):
+    """Save message to cache with character info if available"""
+    from config import message_cache  # Import here to avoid circular dependency
+    
+    if character_key:
+        message_cache[message_id] = {
+            "text": text,
+            "character": character_key
+        }
+    else:
+        # For non-character messages (clues, narrator, etc.), just save text
+        message_cache[message_id] = {"text": text}
+
+def get_message_from_cache(message_id: int) -> dict:
+    """Get message info from cache, returns dict with 'text' and optionally 'character'"""
+    from config import message_cache  # Import here to avoid circular dependency
+    
+    cached = message_cache.get(message_id)
+    if cached is None:
+        return {"text": "I couldn't find the original message."}
+    
+    # Handle both old format (string) and new format (dict)
+    if isinstance(cached, str):
+        return {"text": cached}
+    elif isinstance(cached, dict):
+        return cached
+    else:
+        return {"text": "I couldn't find the original message."}
+
+def get_character_from_message_id(message_id: int) -> Optional[str]:
+    """Get character key from cached message by message ID"""
+    message_info = get_message_from_cache(message_id)
+    return message_info.get("character")
 
 def escape_markdown_v2(text: str) -> str:
     """Escapes special characters for Telegram's MarkdownV2 parse mode."""

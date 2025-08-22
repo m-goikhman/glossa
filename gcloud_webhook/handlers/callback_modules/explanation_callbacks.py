@@ -14,7 +14,7 @@ from telegram.ext import ContextTypes
 
 from config import GAME_STATE, message_cache
 from ai_services import ask_word_spotter
-from utils import log_message
+from utils import log_message, get_message_from_cache
 from ..game_utils import get_participant_code
 from ..tutoring import send_tutor_explanation
 
@@ -29,7 +29,7 @@ async def handle_explain_action(update: Update, context: ContextTypes.DEFAULT_TY
     
     if sub_action == "init":
         original_message_id = int(parts[2])
-        original_text = message_cache.get(original_message_id, "I couldn't find the original message.")
+        original_text = get_message_from_cache(original_message_id)["text"]
         
         # Log the explain action initiation
         log_message(user_id, "user_action", f"Clicked 'Explain' button for message: {original_text[:100]}...", get_participant_code(user_id))
@@ -45,7 +45,7 @@ async def handle_explain_action(update: Update, context: ContextTypes.DEFAULT_TY
     elif sub_action == "word":
         original_message_id = int(parts[2])
         word_to_explain = parts[3]
-        original_message = message_cache.get(original_message_id, "")
+        original_message = get_message_from_cache(original_message_id)["text"]
         
         # Log the word explanation request
         log_message(user_id, "user_action", f"Requested explanation for word: '{word_to_explain}' from message: {original_message[:100]}...", get_participant_code(user_id))
@@ -54,7 +54,7 @@ async def handle_explain_action(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif sub_action == "all":
         original_message_id = int(parts[2])
-        original_text = message_cache.get(original_message_id, "I couldn't find the original message.")
+        original_text = get_message_from_cache(original_message_id)["text"]
         
         # Log the sentence explanation request
         log_message(user_id, "user_action", f"Requested explanation for entire sentence: {original_text[:100]}...", get_participant_code(user_id))

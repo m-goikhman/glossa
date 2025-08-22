@@ -1,10 +1,86 @@
 import json
+import re
 from groq import Groq
 from config import GROQ_API_KEY, user_histories
 from utils import load_system_prompt, log_message, combine_character_prompt
 
 # Initialize the Groq API client
 client = Groq(api_key=GROQ_API_KEY)
+
+# Telegram's message length limit
+TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
+def validate_ai_response(response: str, character_key: str = None) -> tuple[bool, str]:
+    """
+    Validates an AI response for corruption, excessive length, and other issues.
+    Returns (is_valid, cleaned_response_or_fallback)
+    """
+    if not response or not response.strip():
+        return False, "I'm not sure how to respond to that."
+    
+    response = response.strip()
+    
+    # Check for excessive length (Telegram limit)
+    if len(response) > TELEGRAM_MAX_MESSAGE_LENGTH:
+        print(f"WARNING: AI response too long ({len(response)} chars), truncating")
+        response = response[:TELEGRAM_MAX_MESSAGE_LENGTH-50] + "..."
+        return True, response
+    
+    # Check for corruption patterns
+    corruption_patterns = [
+        # Excessive repetition of random words
+        r'\b(\w+)(\s+\1){10,}',  # Same word repeated 10+ times
+        # Random code-like patterns
+        r'(BuilderFactory|externalActionCode|RODUCTION|\.visitInsn){5,}',
+        # Excessive dashes or special characters
+        r'[-]{20,}',
+        # Random programming terms repeated
+        r'(PSI|MAV|Basel|Toastr|contaminants|roscope){5,}',
+        # Excessive parentheses or brackets
+        r'[\(\)\[\]]{10,}',
+    ]
+    
+    for pattern in corruption_patterns:
+        if re.search(pattern, response, re.IGNORECASE):
+            print(f"WARNING: Corrupted AI response detected (pattern: {pattern[:20]}...)")
+            print(f"Corrupted response preview: {response[:200]}...")
+            return False, _get_fallback_response(character_key)
+    
+    # Check for excessive repetition of any phrase
+    words = response.split()
+    if len(words) > 50:  # Only check longer responses
+        # Look for phrases repeated more than 5 times
+        for i in range(len(words) - 2):
+            phrase = ' '.join(words[i:i+3])
+            if response.count(phrase) > 5:
+                print(f"WARNING: Excessive phrase repetition detected: '{phrase}'")
+                return False, _get_fallback_response(character_key)
+    
+    # Check for reasonable character-to-word ratio (detect gibberish)
+    if len(words) > 10:
+        avg_word_length = len(response.replace(' ', '')) / len(words)
+        if avg_word_length > 15:  # Unusually long average word length
+            print(f"WARNING: Suspicious word length pattern (avg: {avg_word_length})")
+            return False, _get_fallback_response(character_key)
+    
+    return True, response
+
+def _get_fallback_response(character_key: str = None) -> str:
+    """Returns an appropriate fallback response for a character."""
+    if character_key:
+        from config import CHARACTER_DATA
+        char_data = CHARACTER_DATA.get(character_key, {})
+        char_name = char_data.get("full_name", character_key)
+        return f"I need a moment to think about that properly."
+    return "I'm having trouble processing that request right now."
+
+def clear_user_conversation_history(user_id: int):
+    """Clears conversation history for a user, useful when corruption is detected."""
+    history_key = str(user_id)
+    if history_key in user_histories:
+        print(f"WARNING: Clearing conversation history for user {user_id} due to corruption")
+        user_histories[history_key] = []
+        log_message(user_id, "history_cleared", "Conversation history cleared due to AI corruption", None)
 
 
 
@@ -22,7 +98,7 @@ async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str, 
         from config import CHARACTER_DATA  # Local import to avoid circular dependency
         char_data = CHARACTER_DATA.get(character_key, {})
         char_name = char_data.get("full_name", character_key)
-        enhanced_system_prompt = f"{system_prompt}\n\nIMPORTANT: You are {char_name} ({character_key}). You must respond ONLY as {char_name}, speaking in first person about YOUR OWN experiences and observations. Do not speak for other characters or describe their actions."
+        enhanced_system_prompt = f"{system_prompt}\n\nIMPORTANT: You are {char_name}. You must respond ONLY as {char_name}, speaking in first person about YOUR OWN experiences and observations. Do not speak for other characters or describe their actions."
     else:
         enhanced_system_prompt = system_prompt
     
@@ -31,12 +107,27 @@ async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str, 
     messages.append({"role": "user", "content": user_message})
     
     try:
-        chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.8)
+        chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.7)  # Reduced from 0.8 for more stability
         assistant_reply = chat_completion.choices[0].message.content
         
         if not assistant_reply or assistant_reply.strip() == "":
             print(f"WARNING: Empty response from AI for user {user_id}")
             return "I'm not sure how to respond to that."
+        
+        # Validate the AI response for corruption and excessive length
+        is_valid, validated_response = validate_ai_response(assistant_reply, character_key)
+        if not is_valid:
+            print(f"WARNING: AI response validation failed for user {user_id}, using fallback")
+            log_message(user_id, "ai_validation_failed", f"Original response preview: {assistant_reply[:200]}...", None)
+            
+            # If corruption is severe (very long corrupted response), clear conversation history
+            if len(assistant_reply) > 5000:
+                print(f"WARNING: Severe AI corruption detected for user {user_id}, clearing conversation history")
+                clear_user_conversation_history(user_id)
+            
+            assistant_reply = validated_response
+        else:
+            assistant_reply = validated_response
         
         # Clean up any character name prefixes from the response
         if character_key:
@@ -47,6 +138,10 @@ async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str, 
             
             # Try to remove various patterns of character name prefixes
             patterns_to_remove = [
+                f"[{character_key}]: ",
+                f"[{character_key.lower()}]: ",
+                f"[{character_key.upper()}]: ",
+                f"[{char_name}]: ",
                 f"{character_key}: ",
                 f"{character_key.lower()}: ",
                 f"{character_key.upper()}: ",

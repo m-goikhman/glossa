@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes
 
 from config import GAME_STATE, CHARACTER_DATA, message_cache
 from ai_services import ask_for_dialogue, ask_director
-from utils import load_system_prompt, log_message, create_explain_button, combine_character_prompt
+from utils import load_system_prompt, log_message, create_explain_button, combine_character_prompt, save_message_to_cache, get_character_from_message_id
 from progress_manager import progress_manager
 
 # Import utility functions
@@ -22,7 +22,7 @@ from .game_utils import get_participant_code, save_user_game_state
 logger = logging.getLogger(__name__)
 
 
-async def handle_private_character_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, user_text: str):
+async def handle_private_character_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, user_text: str, reply_info=None):
     """Handles private conversations directly with a specific character, bypassing the Director AI."""
     state = GAME_STATE[user_id]
     char_key = state.get("current_character")
@@ -38,7 +38,12 @@ async def handle_private_character_conversation(update: Update, context: Context
     
     # Create a context-aware trigger for the character
     topic_memory = state.get("topic_memory", {"topic": "None", "spoken": [], "predefined_used": []})
-    context_trigger = f"The detective is asking you a question: '{user_text}'. Current topic: {topic_memory.get('topic', 'None')}. Respond as your character."
+    
+    # Include reply context if user is replying to a specific message
+    context_trigger = f"The detective is asking you a question: '{user_text}'. Current topic: {topic_memory.get('topic', 'None')}."
+    if reply_info:
+        context_trigger += f" The detective is replying to your previous message: '{reply_info['replied_to_text']}'."
+    context_trigger += " Respond as your character."
     
     logger.info(f"User {user_id}: Direct character conversation with '{char_key}'")
     
@@ -51,7 +56,7 @@ async def handle_private_character_conversation(update: Update, context: Context
             
             # Add explain button
             keyboard = create_explain_button(reply_message.message_id)
-            message_cache[reply_message.message_id] = reply_text
+            save_message_to_cache(reply_message.message_id, reply_text, char_key)
             await context.bot.edit_message_reply_markup(
                 chat_id=reply_message.chat_id, 
                 message_id=reply_message.message_id, 
@@ -210,26 +215,41 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     
                     # Add explain button for both character_reply and character_reaction
                     keyboard = create_explain_button(reply_message.message_id)
-                    message_cache[reply_message.message_id] = reply_text
+                    save_message_to_cache(reply_message.message_id, reply_text, char_key)
                     await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
                     
                     # Log the character's response
                     log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
                 except Exception as e:
-                    logger.error(f"User {user_id}: FAILED to send message to Telegram. Error: {e}. Original text: '{reply_text}'")
-                    # Try sending without markdown as fallback
-                    try:
-                        fallback_reply = f"{char_data['emoji']} {char_data['full_name']}: {reply_text}"
-                        await update.message.reply_text(fallback_reply, parse_mode=None)
-                        logger.info(f"User {user_id}: Sent fallback message without markdown.")
-                    except Exception as fallback_error:
-                        logger.error(f"User {user_id}: Even fallback message failed: {fallback_error}")
-                        # Last resort - try to send just the text without any formatting
+                    logger.error(f"User {user_id}: FAILED to send message to Telegram. Error: {e}.")
+                    
+                    # Check if the error is due to message length
+                    if "Text is too long" in str(e) or "MESSAGE_TOO_LONG" in str(e):
+                        logger.error(f"User {user_id}: Message too long, using character fallback response")
                         try:
-                            await update.message.reply_text(reply_text, parse_mode=None)
-                            logger.info(f"User {user_id}: Sent plain text message as last resort.")
-                        except Exception as final_error:
-                            logger.error(f"User {user_id}: All attempts to send character reply failed: {final_error}")
+                            fallback_message = f"I need a moment to organize my thoughts properly."
+                            fallback_reply = f"{char_data['emoji']} *{char_data['full_name']}:* {fallback_message}"
+                            await update.message.reply_text(fallback_reply, parse_mode='Markdown')
+                            logger.info(f"User {user_id}: Sent character fallback for too-long message.")
+                        except Exception as length_fallback_error:
+                            logger.error(f"User {user_id}: Length fallback also failed: {length_fallback_error}")
+                    else:
+                        # Try sending without markdown as fallback
+                        try:
+                            # Truncate if still too long
+                            safe_reply_text = reply_text[:500] + "..." if len(reply_text) > 500 else reply_text
+                            fallback_reply = f"{char_data['emoji']} {char_data['full_name']}: {safe_reply_text}"
+                            await update.message.reply_text(fallback_reply, parse_mode=None)
+                            logger.info(f"User {user_id}: Sent fallback message without markdown.")
+                        except Exception as fallback_error:
+                            logger.error(f"User {user_id}: Even fallback message failed: {fallback_error}")
+                            # Last resort - send a safe generic message
+                            try:
+                                safe_message = f"{char_data['emoji']} {char_data['full_name']}: I'm having trouble responding right now."
+                                await update.message.reply_text(safe_message, parse_mode=None)
+                                logger.info(f"User {user_id}: Sent safe generic message as last resort.")
+                            except Exception as final_error:
+                                logger.error(f"User {user_id}: All attempts to send character reply failed: {final_error}")
             else:
                 logger.error(f"User {user_id}: Character '{char_key}' generated empty reply.")
                 # Send a fallback message when character generates empty reply
@@ -296,3 +316,63 @@ async def process_director_decision(update: Update, context: ContextTypes.DEFAUL
         logger.info(f"User {user_id}: Executing scene action {i+1}/{len(scene)}: {scene_action.get('action')}")
         logger.info(f"User {user_id}: Scene action data: {scene_action.get('data', {})}")
         await execute_scene_action(update, context, user_id, scene_action)
+
+
+async def handle_character_reply_response(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, user_text: str, character_key: str, reply_info: dict):
+    """Handle direct reply to a character message - character responds directly without Director AI."""
+    
+    logger.info(f"User {user_id}: Handling reply to character '{character_key}' message")
+    
+    state = GAME_STATE[user_id]
+    
+    if character_key not in CHARACTER_DATA:
+        logger.error(f"User {user_id}: Invalid character key '{character_key}' for reply response")
+        return False
+    
+    char_data = CHARACTER_DATA[character_key]
+    # Get current language level from user's game state  
+    current_language_level = state.get("current_language_level", "B1")
+    system_prompt = combine_character_prompt(character_key, current_language_level)
+    
+    # Create context-aware trigger that includes reply information
+    topic_memory = state.get("topic_memory", {"topic": "None", "spoken": [], "predefined_used": []})
+    context_trigger = f"The detective is replying to your message: '{reply_info['replied_to_text']}'. Their reply is: '{user_text}'. Current topic: {topic_memory.get('topic', 'None')}. Respond as your character, acknowledging their reply."
+    
+    logger.info(f"User {user_id}: Character '{character_key}' responding to reply")
+    
+    try:
+        reply_text = await ask_for_dialogue(user_id, context_trigger, system_prompt, character_key)
+        
+        if reply_text:
+            formatted_reply = f"{char_data['emoji']} *{char_data['full_name']}:* {reply_text}"
+            reply_message = await update.message.reply_text(formatted_reply, parse_mode='Markdown')
+            
+            # Add explain button
+            keyboard = create_explain_button(reply_message.message_id)
+            save_message_to_cache(reply_message.message_id, reply_text, character_key)
+            await context.bot.edit_message_reply_markup(
+                chat_id=reply_message.chat_id, 
+                message_id=reply_message.message_id, 
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            
+            # Log the character's response
+            log_message(user_id, f"character_{character_key}_reply", reply_text, get_participant_code(user_id))
+            
+            logger.info(f"User {user_id}: Character '{character_key}' replied to user's reply successfully")
+            return True
+        else:
+            logger.error(f"User {user_id}: Character '{character_key}' generated empty reply")
+            # Send fallback message
+            fallback_message = f"{char_data['full_name']} is thinking..."
+            await update.message.reply_text(f"{char_data['emoji']} *{char_data['full_name']}:* *[Character is thinking...]*", parse_mode='Markdown')
+            
+            # Log the fallback response
+            log_message(user_id, f"character_{character_key}_reply", fallback_message, get_participant_code(user_id))
+            return True
+            
+    except Exception as e:
+        logger.error(f"User {user_id}: Error in character '{character_key}' reply response: {e}")
+        # Send error fallback
+        await update.message.reply_text(f"{char_data['emoji']} *{char_data['full_name']}:* *[Sorry, I didn't catch that...]*", parse_mode='Markdown')
+        return True

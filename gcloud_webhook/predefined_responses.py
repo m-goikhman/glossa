@@ -35,7 +35,7 @@ KEYWORD_PATTERNS = {
     },
     
     "usb_drive": {
-        "keywords": ["usb", "drive", "guitar", "blue", "device", "usb-drive", "guitar-shaped", "flash drive", "memory stick", "silicone", "silicon"],
+        "keywords": ["usb", "guitar", "blue", "device", "usb-drive", "guitar-shaped", "flash drive", "memory stick", "silicone", "silicon"],
         "characters_priority": ["pauline", "fiona"],
         "response_strategy": "all",
         "response_templates": {
@@ -334,16 +334,9 @@ def try_predefined_response(user_id: int, message: str, topic_memory: Dict) -> O
     if response_strategy == "ordered_sequence":
         # For ordered sequence, check if the topic has already been discussed
         if current_topic == topic_name:
-            # This ordered sequence has already been shown
-            print(f"DEBUG PREDEFINED: Ordered sequence for topic {detected_topic} already shown, returning director note")
-            director_messages = {
-                "arrival_time": "Everyone has provided details about their arrival at Alex's apartment. You might want to examine how this information connects to the timeline of events.",
-            }
-            message = director_messages.get(detected_topic, "This topic has already been thoroughly discussed.")
-            return {
-                "scene": [{"action": "director_note", "data": {"message": message}}],
-                "new_topic": f"Investigation direction after {topic_name}"
-            }
+            # This ordered sequence has already been shown, let AI director decide
+            print(f"DEBUG PREDEFINED: Ordered sequence for topic {detected_topic} already shown, letting director decide")
+            return None
         else:
             # Show the full ordered sequence and mark as used
             result = create_predefined_response(detected_topic, [], adjusted_topic_memory)

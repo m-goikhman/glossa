@@ -2,12 +2,16 @@ HOW TO PLAY
 
 💬 **Type in chat** - Talk to suspects by typing your questions
 
-👥 **Talk to everyone** - Just type here in chat! Everyone hears you
+👥 **Talk to everyone** - Just type here in chat! Everyone hears you. (It also works when you are looking at case materials). 
+
+↩️ **Reply to characters** - You can also use Telegram's reply function to answer to any character's message (like you could do in a normal group chat)
 
 👤 **Private talk** - Use menu to choose one person, then type. 💡 People share more secrets privately.
+
+
 
 🗂️ **Case Materials** - Check evidence and Detective Guide with investigation tips
 
 📒 **Explain difficult words** - Get simple definitions from AI
 
-✍️ **Learning Menu** – Check your progress and adjust text difficulty (Light/Balanced/Advanced)
+✍️ **Learning Menu** – Check your progress and chose a text difficulty (Light / Balanced / Advanced)

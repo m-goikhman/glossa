@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 
 from config import GAME_STATE, POST_TEST_TASKS
 from utils import load_system_prompt, log_message
+from ai_services import clear_user_conversation_history
 from game_state_manager import game_state_manager
 from progress_manager import progress_manager
 

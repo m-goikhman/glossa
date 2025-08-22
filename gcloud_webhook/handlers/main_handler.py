@@ -12,12 +12,12 @@ from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
 from config import GAME_STATE, POST_TEST_TASKS
-from utils import load_system_prompt, log_message
+from utils import load_system_prompt, log_message, get_character_from_message_id
 from game_state_manager import game_state_manager
 
 # Import handlers from other modules
 from .commands import start_command_handler
-from .conversations import handle_private_character_conversation, process_director_decision
+from .conversations import handle_private_character_conversation, process_director_decision, handle_character_reply_response
 from .tutoring import send_tutor_explanation, analyze_and_log_text
 from .game_utils import (
     cancel_post_test_task, 
@@ -38,6 +38,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     user_id = update.message.from_user.id
     user_text = update.message.text
+    
+    # Check if this message is a reply to another message
+    reply_info = None
+    if update.message.reply_to_message:
+        reply_info = {
+            "replied_to_message_id": update.message.reply_to_message.message_id,
+            "replied_to_text": update.message.reply_to_message.text,
+            "replied_to_user_id": update.message.reply_to_message.from_user.id if update.message.reply_to_message.from_user else None,
+            "replied_to_date": update.message.reply_to_message.date
+        }
+        logger.info(f"User {user_id}: Replying to message {reply_info['replied_to_message_id']} with text: '{reply_info['replied_to_text'][:50]}...'")
     
     # Get participant code for logging (if state exists)
     participant_code = None
@@ -150,6 +161,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"--- handle_message END for user {user_id} (word explained) ---")
         return
     
+    # Check if user is replying to a character message (highest priority)
+    if reply_info:
+        character_key = get_character_from_message_id(reply_info['replied_to_message_id'])
+        if character_key:
+            logger.info(f"User {user_id}: Detected reply to character '{character_key}' message")
+            # Handle reply to character directly, bypassing normal flow
+            if await handle_character_reply_response(update, context, user_id, user_text, character_key, reply_info):
+                logger.info(f"--- handle_message END for user {user_id} (character reply handled) ---")
+                # Save state after character reply
+                await save_user_game_state(user_id)
+                return
+    
     # Безопасно создаем фоновую задачу
     try:
         asyncio.create_task(analyze_and_log_text(user_id, user_text))
@@ -166,7 +189,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Handle private conversation directly with character (bypass Director AI)
         logger.info(f"User {user_id}: Processing private conversation with character '{char_key}'")
-        if await handle_private_character_conversation(update, context, user_id, user_text):
+        if await handle_private_character_conversation(update, context, user_id, user_text, reply_info):
             logger.info(f"--- handle_message END for user {user_id} (private conversation handled) ---")
             # Save state after private conversation
             await save_user_game_state(user_id)

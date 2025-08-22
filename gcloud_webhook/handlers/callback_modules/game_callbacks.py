@@ -16,7 +16,7 @@ from telegram.ext import ContextTypes
 
 from config import GAME_STATE, CHARACTER_DATA, SUSPECT_KEYS, message_cache
 from ai_services import ask_for_dialogue
-from utils import load_system_prompt, log_message, create_explain_button, combine_character_prompt
+from utils import load_system_prompt, log_message, create_explain_button, combine_character_prompt, save_message_to_cache
 from ..game_utils import (
     get_participant_code, 
     save_user_game_state, 
@@ -91,7 +91,7 @@ async def handle_clue_action(update: Update, context: ContextTypes.DEFAULT_TYPE,
     reply_message = await context.bot.send_message(chat_id=user_id, text=clue_text, parse_mode='Markdown')
     if reply_message:
         keyboard = create_explain_button(reply_message.message_id)
-        message_cache[reply_message.message_id] = clue_text
+        save_message_to_cache(reply_message.message_id, clue_text)  # No character for clues
         await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -113,7 +113,7 @@ async def handle_talk_action(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await query.delete_message()
         reply_message = await context.bot.send_message(chat_id=user_id, text=f"🎙️ _{description_text}_", parse_mode='Markdown')
         keyboard = create_explain_button(reply_message.message_id)
-        message_cache[reply_message.message_id] = description_text
+        save_message_to_cache(reply_message.message_id, description_text)  # No character for narrator
         await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
         
         # Log the narrator's transition description
@@ -142,7 +142,7 @@ async def handle_mode_action(update: Update, context: ContextTypes.DEFAULT_TYPE,
         
         # Add explain button
         keyboard = create_explain_button(reply_message.message_id)
-        message_cache[reply_message.message_id] = random_phrase
+        save_message_to_cache(reply_message.message_id, random_phrase, char_key)  # Save with character
         await context.bot.edit_message_reply_markup(
             chat_id=reply_message.chat_id, 
             message_id=reply_message.message_id, 
