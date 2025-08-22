@@ -20,14 +20,14 @@ KEYWORD_PATTERNS = {
                 "action": "character_reply",
                 "data": {
                     "character_key": "tim",
-                    "trigger_message": "The detective is asking about the threatening Christmas card you received. Share your experience and emotional reaction to receiving it."
+                    "trigger_message": "The detective is asking about the threatening Christmas card you received. Share your experience and emotional reaction to receiving it. After mentioning it initially, refer to it as 'the card', 'the threat', or 'it' - don't keep repeating 'Christmas card'."
                 }
             },
             "fiona": {
                 "action": "character_reply", 
                 "data": {
                     "character_key": "fiona",
-                    "trigger_message": "The detective is asking about the Christmas card threat. You saw Tim's reaction when he received it - share what you observed."
+                    "trigger_message": "Tim just shared his experience with the threatening card. As someone who witnessed his reaction, add your perspective on how the threat affected him and what you observed about his emotional state. Use natural language - refer to it as 'the threat', 'the message', or 'it'."
                 }
             }
         },
@@ -43,14 +43,14 @@ KEYWORD_PATTERNS = {
                 "action": "character_reply",
                 "data": {
                     "character_key": "pauline", 
-                    "trigger_message": "The detective is asking about the blue guitar-shaped USB drive. Share what you know about this device."
+                    "trigger_message": "The detective is asking about the USB drive Alex asked you to retrieve. Share what you know about getting this device for him - avoid repeating descriptive phrases, just call it 'the drive' or 'the USB'."
                 }
             },
             "fiona": {
                 "action": "character_reply",
                 "data": {
                     "character_key": "fiona",
-                    "trigger_message": "The detective is asking about the USB drive. As Alex's girlfriend, share what you know about his 'lucky' USB drive."
+                    "trigger_message": "Pauline just explained how she retrieved the USB drive for Alex. As his girlfriend, add your personal perspective about this device - why Alex considered it 'lucky' and how it relates to your relationship. Refer to it naturally as 'it', 'the device', or 'his drive' rather than repeating the full description."
                 }
             }
         },
@@ -66,28 +66,28 @@ KEYWORD_PATTERNS = {
                 "action": "character_reply",
                 "data": {
                     "character_key": "tim",
-                    "trigger_message": "The detective is asking for your alibi at 8:45 PM. Provide your cover story about where you were."
+                    "trigger_message": "The detective is asking for your alibi at 8:45 PM. Provide your cover story about where you were. Use natural language - after establishing the time, refer to it as 'then', 'at that time', etc."
                 }
             },
             "fiona": {
                 "action": "character_reply",
                 "data": {
                     "character_key": "fiona", 
-                    "trigger_message": "The detective is asking for your alibi at 8:45 PM. Share where you were at that time."
+                    "trigger_message": "Tim just provided his whereabouts for that evening. Now share your own location at that time, and note any details that might corroborate or contradict what Tim said. Avoid repeating '8:45 PM' - use 'then', 'at that time', 'when it happened'."
                 }
             },
             "ronnie": {
                 "action": "character_reply",
                 "data": {
                     "character_key": "ronnie",
-                    "trigger_message": "The detective is asking for your alibi at 8:45 PM. Tell them where you were at that crucial time."
+                    "trigger_message": "Both Tim and Fiona have shared where they were that evening. Tell them your location at that crucial time, keeping in mind what the others have already revealed. Use varied language - 'then', 'at that moment', etc."
                 }
             },
             "pauline": {
                 "action": "character_reply", 
                 "data": {
                     "character_key": "pauline",
-                    "trigger_message": "The detective is asking for your alibi at 8:45 PM. Explain where you were since you weren't at the party."
+                    "trigger_message": "After hearing the others' accounts of that evening, explain where you were since you weren't at the party. Consider how your whereabouts fit with the timeline others have established. Use natural language variations."
                 }
             }
         },

@@ -8,13 +8,28 @@ client = Groq(api_key=GROQ_API_KEY)
 
 
 
-async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str) -> str:
+async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str, character_key: str = None) -> str:
     """The main function for all dialogue-based AI calls. Always expects and returns a simple string."""
-    if user_id not in user_histories:
-        user_histories[user_id] = []
-    messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(user_histories[user_id][-10:])
+    # Use shared conversation history so characters can see what others have said
+    # but enhance the system prompt to clearly identify the speaking character
+    history_key = str(user_id)
+    
+    if history_key not in user_histories:
+        user_histories[history_key] = []
+    
+    # Enhance system prompt with character identity reminder
+    if character_key:
+        from config import CHARACTER_DATA  # Local import to avoid circular dependency
+        char_data = CHARACTER_DATA.get(character_key, {})
+        char_name = char_data.get("full_name", character_key)
+        enhanced_system_prompt = f"{system_prompt}\n\nIMPORTANT: You are {char_name} ({character_key}). You must respond ONLY as {char_name}, speaking in first person about YOUR OWN experiences and observations. Do not speak for other characters or describe their actions."
+    else:
+        enhanced_system_prompt = system_prompt
+    
+    messages = [{"role": "system", "content": enhanced_system_prompt}]
+    messages.extend(user_histories[history_key][-10:])
     messages.append({"role": "user", "content": user_message})
+    
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.8)
         assistant_reply = chat_completion.choices[0].message.content
@@ -23,8 +38,42 @@ async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str) 
             print(f"WARNING: Empty response from AI for user {user_id}")
             return "I'm not sure how to respond to that."
         
-        user_histories[user_id].extend([{"role": "user", "content": user_message}, {"role": "assistant", "content": assistant_reply}])
-        if len(user_histories[user_id]) > 20: user_histories[user_id] = user_histories[user_id][-20:]
+        # Clean up any character name prefixes from the response
+        if character_key:
+            # Remove patterns like "tim: ", "fiona: ", "Tim Kane: ", etc.
+            from config import CHARACTER_DATA  # Local import to avoid circular dependency
+            char_data = CHARACTER_DATA.get(character_key, {})
+            char_name = char_data.get("full_name", character_key)
+            
+            # Try to remove various patterns of character name prefixes
+            patterns_to_remove = [
+                f"{character_key}: ",
+                f"{character_key.lower()}: ",
+                f"{character_key.upper()}: ",
+                f"{char_name}: ",
+                f"*{char_name}:* ",
+                f"**{char_name}:** ",
+            ]
+            
+            for pattern in patterns_to_remove:
+                if assistant_reply.startswith(pattern):
+                    assistant_reply = assistant_reply[len(pattern):].strip()
+                    break
+        
+        # Store the conversation with character identification
+        if character_key:
+            tagged_user_message = f"[Detective to {character_key}]: {user_message}"
+            tagged_assistant_reply = f"[{character_key}]: {assistant_reply}"
+        else:
+            tagged_user_message = user_message
+            tagged_assistant_reply = assistant_reply
+            
+        user_histories[history_key].extend([
+            {"role": "user", "content": tagged_user_message}, 
+            {"role": "assistant", "content": tagged_assistant_reply}
+        ])
+        if len(user_histories[history_key]) > 20: 
+            user_histories[history_key] = user_histories[history_key][-20:]
         return assistant_reply
     except Exception as e:
         print(f"ERROR: Failed in ask_for_dialogue for user {user_id}: {e}")

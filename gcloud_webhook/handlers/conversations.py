@@ -43,7 +43,7 @@ async def handle_private_character_conversation(update: Update, context: Context
     logger.info(f"User {user_id}: Direct character conversation with '{char_key}'")
     
     try:
-        reply_text = await ask_for_dialogue(user_id, context_trigger, system_prompt)
+        reply_text = await ask_for_dialogue(user_id, context_trigger, system_prompt, char_key)
         
         if reply_text:
             formatted_reply = f"{char_data['emoji']} *{char_data['full_name']}:* {reply_text}"
@@ -196,7 +196,7 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
             # Get current language level from user's game state
             current_language_level = state.get("current_language_level", "B1")
             system_prompt = combine_character_prompt(char_key, current_language_level)
-            reply_text = await ask_for_dialogue(user_id, trigger_msg, system_prompt)
+            reply_text = await ask_for_dialogue(user_id, trigger_msg, system_prompt, char_key)
             
             if reply_text:
                 logger.info(f"User {user_id}: Character '{char_key}' generated reply: '{reply_text[:100]}...'")
