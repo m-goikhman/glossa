@@ -97,7 +97,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
     state = GAME_STATE[user_id]
     
     # Check if game is already completed (but allow final report and reveal)
-    if state.get("game_completed") and action_type not in ["final", "reveal"]:
+    if state.get("game_completed") and action_type not in ["final", "reveal", "reveal_custom"]:
         await query.edit_message_text("🎭 Your game has already ended. Use /start to begin a new adventure!")
         return
     

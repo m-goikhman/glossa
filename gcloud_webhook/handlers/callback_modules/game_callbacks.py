@@ -216,7 +216,7 @@ async def handle_accuse_action(update: Update, context: ContextTypes.DEFAULT_TYP
         attempt_number = state.get("accusation_attempts", 0) + 1
         attempts_text = f" (Attempt {attempt_number}/2)" if attempt_number > 1 else ""
         
-        await query.edit_message_text(f"🎙️ All eyes turn to them {char_name}, the person you've just accused of attacking Alex. {attempts_text}_", parse_mode='Markdown')
+        await query.edit_message_text(f"🎙️ All eyes turn to them {char_name}, the person you've just accused of attacking Alex. {attempts_text}", parse_mode='Markdown')
         
         # Process accusation immediately without asking for explanation
         await handle_accusation_direct(update, context, user_id, accused_key)

@@ -44,7 +44,7 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             await game_state_manager.delete_game_state(user_id)
             
             # Clear progress data for fresh start
-            progress_manager.clear_user_progress(user_id)
+            progress_manager.clear_user_progress(user_id, get_participant_code(user_id))
             
             # Start new game with onboarding
             GAME_STATE[user_id] = {

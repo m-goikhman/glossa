@@ -125,6 +125,17 @@ async def handle_accusation_direct(update: Update, context: ContextTypes.DEFAULT
         # Wrong accusation - always show defense first
         defense_text = load_system_prompt(f"game_texts/defense_{accused_key}.txt")
         
+        # Calculate remaining attempts and update the text dynamically
+        attempts_made = state["accusation_attempts"]
+        remaining_attempts = 2 - attempts_made
+        
+        if remaining_attempts <= 0:
+            # No attempts left
+            defense_text = defense_text.replace("I have **1 more attempt** left.", "I have **no attempts** left.")
+        elif remaining_attempts == 1:
+            # 1 attempt left (this is already correct in the files)
+            pass  # Text already says "I have **1 more attempt** left."
+        
         await asyncio.sleep(1)  # Brief pause for drama
         await update.callback_query.message.reply_text(defense_text, parse_mode='Markdown')
         

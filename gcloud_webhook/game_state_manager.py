@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional
 from google.cloud import storage
 from config import GCS_BUCKET_NAME
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,10 @@ class GameStateManager:
         
         try:
             # Add timestamp for when state was saved
-            state_with_metadata = {
+            cet_tz = pytz.timezone('Europe/Berlin')
+            data = {
                 "state": state,
-                "last_saved": datetime.datetime.now().isoformat(),
+                "last_saved": datetime.datetime.now(cet_tz).isoformat(),
                 "user_id": user_id
             }
             

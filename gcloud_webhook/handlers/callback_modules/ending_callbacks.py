@@ -17,7 +17,7 @@ from config import GAME_STATE
 from utils import load_system_prompt
 from game_state_manager import game_state_manager
 from progress_manager import progress_manager
-from ..game_utils import save_user_game_state
+from ..game_utils import save_user_game_state, get_participant_code
 from ..commands import restart_command_handler
 from ..reports import generate_final_english_report
 
@@ -61,14 +61,24 @@ async def handle_reveal_action(update: Update, context: ContextTypes.DEFAULT_TYP
             
             if step_data["button"]:
                 keyboard = [[InlineKeyboardButton(step_data["button"], callback_data="reveal__next")]]
-                await query.edit_message_text(
-                    text,
+                # Send new message instead of editing to preserve previous content
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='Markdown'
                 )
+                # Remove button from previous message to avoid confusion
+                await query.edit_message_reply_markup(reply_markup=None)
             else:
-                # Final message - show questionnaire after
-                await query.edit_message_text(text, parse_mode='Markdown')
+                # Final message - send new message to preserve previous content
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode='Markdown'
+                )
+                # Remove button from previous message
+                await query.edit_message_reply_markup(reply_markup=None)
                 
                 # Show questionnaire after final reveal
                 questionnaire_text = load_system_prompt("game_texts/outro_questionnaire.txt")
@@ -81,10 +91,20 @@ async def handle_reveal_action(update: Update, context: ContextTypes.DEFAULT_TYP
                 )
         except Exception as e:
             logger.error(f"Failed to load reveal file {step_data['file']}: {e}")
-            await query.edit_message_text("🎭 The case is now closed. Thank you for playing!", parse_mode='Markdown')
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎭 The case is now closed. Thank you for playing!",
+                parse_mode='Markdown'
+            )
+            await query.edit_message_reply_markup(reply_markup=None)
     else:
         # All messages shown - shouldn't happen with new logic, but safety fallback
-        await query.edit_message_text("🎭 The case is now closed. Thank you for playing!", parse_mode='Markdown')
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎭 The case is now closed. Thank you for playing!",
+            parse_mode='Markdown'
+        )
+        await query.edit_message_reply_markup(reply_markup=None)
         
         await save_user_game_state(user_id)
 
@@ -122,8 +142,14 @@ async def handle_reveal_custom_action(update: Update, context: ContextTypes.DEFA
             text = load_system_prompt(step_data["file"])
             
             if step_data["next"]:
-                # Show next button (for reveal_1_truth.txt)
-                await query.edit_message_text(text, parse_mode='Markdown')
+                # Send new message instead of editing to preserve previous content (for reveal_1_truth.txt)
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode='Markdown'
+                )
+                # Remove button from previous message
+                await query.edit_message_reply_markup(reply_markup=None)
                 await asyncio.sleep(2)  # Pause before next message
                 
                 # Automatically show next message
@@ -144,22 +170,32 @@ async def handle_reveal_custom_action(update: Update, context: ContextTypes.DEFA
             else:
                 # This shouldn't be reached with current logic, but safety fallback
                 keyboard = [[InlineKeyboardButton("📊 See Your Final English Report", callback_data="final__report")]]
-                await query.edit_message_text(
-                    text,
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
                     reply_markup=InlineKeyboardMarkup(keyboard),
                     parse_mode='Markdown'
                 )
+                # Remove button from previous message
+                await query.edit_message_reply_markup(reply_markup=None)
         except Exception as e:
             logger.error(f"Failed to load custom reveal file {step_data['file']}: {e}")
-            await query.edit_message_text("🎭 The case is now closed. Thank you for playing!", parse_mode='Markdown')
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="🎭 The case is now closed. Thank you for playing!",
+                parse_mode='Markdown'
+            )
+            await query.edit_message_reply_markup(reply_markup=None)
     else:
         # All messages shown - shouldn't happen with new logic, but safety fallback
         keyboard = [[InlineKeyboardButton("📊 See Your Final English Report", callback_data="final__report")]]
-        await query.edit_message_text(
-            "🎭 The case is now closed. Thank you for playing!",
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="🎭 The case is now closed. Thank you for playing!",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
+        await query.edit_message_reply_markup(reply_markup=None)
         
     await save_user_game_state(user_id)
 
@@ -188,7 +224,7 @@ async def handle_final_action(update: Update, context: ContextTypes.DEFAULT_TYPE
         GAME_STATE.pop(user_id, None)
         
         # Clear progress data
-        progress_manager.clear_user_progress(user_id)
+        progress_manager.clear_user_progress(user_id, get_participant_code(user_id))
         
         # Send final message and remove inline keyboard
         await query.edit_message_text(

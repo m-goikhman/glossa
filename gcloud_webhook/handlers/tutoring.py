@@ -31,7 +31,7 @@ async def analyze_and_log_text(user_id: int, text_to_analyze: str):
         feedback = analysis_result.get("feedback", "")
         log_message(user_id, "tutor_log", f"Logged feedback for: '{text_to_analyze}'", get_participant_code(user_id))
         # Use progress manager instead of local file system
-        progress_manager.add_writing_feedback(user_id, text_to_analyze, feedback)
+        progress_manager.add_writing_feedback(user_id, text_to_analyze, feedback, get_participant_code(user_id))
 
 
 async def send_tutor_explanation(update: Update, context: ContextTypes.DEFAULT_TYPE, text_to_explain: str, original_message: str = ""):
@@ -65,4 +65,4 @@ async def send_tutor_explanation(update: Update, context: ContextTypes.DEFAULT_T
         await context.bot.send_message(chat_id=user_id, text=chunk, parse_mode='Markdown')
     
     # Use progress manager instead of local file system
-    progress_manager.add_word_learned(user_id, text_to_explain, definition)
+    progress_manager.add_word_learned(user_id, text_to_explain, definition, get_participant_code(user_id))

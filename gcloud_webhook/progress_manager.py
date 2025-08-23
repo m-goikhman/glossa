@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from google.cloud import storage
 from config import GCS_BUCKET_NAME
+import pytz
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +29,13 @@ class ProgressManager:
                 self.bucket = None
         return self.bucket
     
-    def _get_progress_blob_name(self, user_id: int) -> str:
+    def _get_progress_blob_name(self, user_id: int, participant_code: str = None) -> str:
         """Get the blob name for storing user's learning progress."""
+        if participant_code:
+            return f"participant_logs/{participant_code}_language_progress.json"
         return f"user_progress/user_{user_id}_progress.json"
     
-    def add_word_learned(self, user_id: int, word: str, definition: str) -> bool:
+    def add_word_learned(self, user_id: int, word: str, definition: str, participant_code: str = None) -> bool:
         """Add a new word to the user's learned words list."""
         bucket = self._get_bucket()
         if not bucket:
@@ -41,11 +44,12 @@ class ProgressManager:
         
         try:
             # Load existing progress
-            progress_data = self.get_user_progress(user_id)
+            progress_data = self.get_user_progress(user_id, participant_code)
             
             # Add new word entry
+            cet_tz = pytz.timezone('Europe/Berlin')
             new_entry = {
-                "timestamp": datetime.datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now(cet_tz).isoformat(),
                 "query": word,
                 "feedback": definition
             }
@@ -55,7 +59,7 @@ class ProgressManager:
                 progress_data.setdefault("words_learned", []).append(new_entry)
                 
                 # Save updated progress
-                return self._save_progress(user_id, progress_data)
+                return self._save_progress(user_id, progress_data, participant_code)
             
             return True  # Word already exists, no need to save
             
@@ -63,7 +67,7 @@ class ProgressManager:
             logger.error(f"Failed to add word progress for user {user_id}: {e}")
             return False
     
-    def add_writing_feedback(self, user_id: int, user_text: str, feedback: str) -> bool:
+    def add_writing_feedback(self, user_id: int, user_text: str, feedback: str, participant_code: str = None) -> bool:
         """Add writing feedback to the user's progress."""
         bucket = self._get_bucket()
         if not bucket:
@@ -72,11 +76,12 @@ class ProgressManager:
         
         try:
             # Load existing progress
-            progress_data = self.get_user_progress(user_id)
+            progress_data = self.get_user_progress(user_id, participant_code)
             
             # Add new feedback entry
+            cet_tz = pytz.timezone('Europe/Berlin')
             new_entry = {
-                "timestamp": datetime.datetime.now().isoformat(),
+                "timestamp": datetime.datetime.now(cet_tz).isoformat(),
                 "query": user_text,
                 "feedback": feedback
             }
@@ -86,7 +91,7 @@ class ProgressManager:
                 progress_data.setdefault("writing_feedback", []).append(new_entry)
                 
                 # Save updated progress
-                return self._save_progress(user_id, progress_data)
+                return self._save_progress(user_id, progress_data, participant_code)
             
             return True  # Feedback already exists, no need to save
             
@@ -94,7 +99,7 @@ class ProgressManager:
             logger.error(f"Failed to add writing feedback for user {user_id}: {e}")
             return False
     
-    def get_user_progress(self, user_id: int) -> Dict[str, Any]:
+    def get_user_progress(self, user_id: int, participant_code: str = None) -> Dict[str, Any]:
         """Get the user's learning progress data."""
         bucket = self._get_bucket()
         if not bucket:
@@ -102,7 +107,7 @@ class ProgressManager:
             return {"words_learned": [], "writing_feedback": []}
         
         try:
-            blob_name = self._get_progress_blob_name(user_id)
+            blob_name = self._get_progress_blob_name(user_id, participant_code)
             blob = bucket.blob(blob_name)
             
             if not blob.exists():
@@ -126,7 +131,7 @@ class ProgressManager:
             logger.error(f"Failed to load progress for user {user_id}: {e}")
             return {"words_learned": [], "writing_feedback": []}
     
-    def _save_progress(self, user_id: int, progress_data: Dict[str, Any]) -> bool:
+    def _save_progress(self, user_id: int, progress_data: Dict[str, Any], participant_code: str = None) -> bool:
         """Save progress data to Google Cloud Storage."""
         bucket = self._get_bucket()
         if not bucket:
@@ -134,7 +139,7 @@ class ProgressManager:
             return False
         
         try:
-            blob_name = self._get_progress_blob_name(user_id)
+            blob_name = self._get_progress_blob_name(user_id, participant_code)
             blob = bucket.blob(blob_name)
             
             blob.upload_from_string(
@@ -149,7 +154,7 @@ class ProgressManager:
             logger.error(f"Failed to save progress for user {user_id}: {e}")
             return False
     
-    def clear_user_progress(self, user_id: int) -> bool:
+    def clear_user_progress(self, user_id: int, participant_code: str = None) -> bool:
         """Clear all progress data for a user."""
         bucket = self._get_bucket()
         if not bucket:
@@ -157,7 +162,7 @@ class ProgressManager:
             return False
         
         try:
-            blob_name = self._get_progress_blob_name(user_id)
+            blob_name = self._get_progress_blob_name(user_id, participant_code)
             blob = bucket.blob(blob_name)
             
             if blob.exists():

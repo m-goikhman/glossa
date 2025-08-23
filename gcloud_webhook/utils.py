@@ -6,6 +6,7 @@ import re
 from typing import Optional
 from google.cloud import storage
 from config import GCS_BUCKET_NAME
+import pytz
 storage_client = None
 bucket = None
 
@@ -47,7 +48,9 @@ def log_message(user_id: int, role: str, content: str, participant_code: str = N
         except Exception: 
             existing_content = ""
 
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Use CET/CEST timezone (Central European Time)
+        cet_tz = pytz.timezone('Europe/Berlin')
+        timestamp = datetime.datetime.now(cet_tz).strftime("%Y-%m-%d %H:%M:%S %Z")
         log_entry = f"[{timestamp}] ({role}): {sanitized_content}\n"
         new_content = existing_content + log_entry
 
@@ -164,7 +167,9 @@ def write_log_entry(user_id: int, entry_type: str, query: str, feedback: str = "
         except (json.JSONDecodeError, FileNotFoundError):
             logs = {"words_learned": [], "writing_feedback": []}
 
-        new_entry = {"timestamp": datetime.datetime.now().isoformat(), "query": query, "feedback": feedback}
+        # Use CET/CEST timezone for consistency
+        cet_tz = pytz.timezone('Europe/Berlin')
+        new_entry = {"timestamp": datetime.datetime.now(cet_tz).isoformat(), "query": query, "feedback": feedback}
         
         target_list_name = ""
         if entry_type == "word":

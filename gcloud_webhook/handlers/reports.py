@@ -47,6 +47,15 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
     """Sends the user a formatted report of their progress using HTML."""
     user_id = update.effective_user.id
     
+    # Helper function to send messages consistently
+    async def send_message(text: str, parse_mode: str = None):
+        if update.callback_query:
+            await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+        elif update.message:
+            await update.message.reply_text(text, parse_mode=parse_mode)
+        else:
+            await context.bot.send_message(chat_id=user_id, text=text, parse_mode=parse_mode)
+    
     # Log the progress report request
     if is_final_report:
         log_message(user_id, "user_action", "Requested final progress report", get_participant_code(user_id))
@@ -56,7 +65,11 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
     # Check if user has game_state, if not try to restore from saved state
     if user_id not in GAME_STATE:
         # Send immediate response to prevent user from leaving
-        typing_message = await update.message.reply_text("🔄 Restoring your game...")
+        typing_message = None
+        if update.message:
+            typing_message = await update.message.reply_text("🔄 Restoring your game...")
+        else:
+            typing_message = await context.bot.send_message(chat_id=user_id, text="🔄 Restoring your game...")
         
         saved_state_data = await game_state_manager.load_game_state(user_id)
         
@@ -89,16 +102,16 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
                 pass
             
             # No saved state - redirect to start
-            await update.message.reply_text("You don't have an active game. Use /start to begin!")
+            await send_message("You don't have an active game. Use /start to begin!")
             return
     
     # Check if game is already completed (but allow final reports)
     if GAME_STATE.get(user_id, {}).get("game_completed") and not is_final_report:
-        await update.message.reply_text("🎭 Your game has already ended. Use /start to begin a new adventure!")
+        await send_message("🎭 Your game has already ended. Use /start to begin a new adventure!")
         return
     
     # Get progress data from progress manager (Google Cloud Storage)
-    logs = progress_manager.get_user_progress(user_id)
+    logs = progress_manager.get_user_progress(user_id, get_participant_code(user_id))
     
     # Log what we received for debugging
     logger.info(f"User {user_id}: Progress data received: {logs}")
@@ -107,7 +120,7 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
     if not logs.get("words_learned") and not logs.get("writing_feedback"):
         logger.info(f"User {user_id}: No progress data found. Logs structure: {logs}")
         if not is_final_report:
-            await update.message.reply_text("You don't have any saved progress yet!")
+            await send_message("You don't have any saved progress yet!")
         return
     
     logger.info(f"User {user_id}: Found progress data - words_learned: {len(logs.get('words_learned', []))}, writing_feedback: {len(logs.get('writing_feedback', []))}")
@@ -136,11 +149,7 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
         if i > 0:
             await asyncio.sleep(1)
         
-        # Определяем, как отправить сообщение
-        if update.callback_query:
-             await context.bot.send_message(chat_id=user_id, text=chunk, parse_mode='HTML')
-        elif update.message:
-            await update.message.reply_text(chunk, parse_mode='HTML')
+        await send_message(chunk, parse_mode='HTML')
     
     # Add back button to ✍️ Learning Menu if this is not a final report
     if not is_final_report and update.callback_query:
@@ -160,7 +169,7 @@ async def generate_final_english_report(update: Update, context: ContextTypes.DE
     log_message(user_id, "user_action", "Requested final English report", get_participant_code(user_id))
     
     # Get progress data from progress manager
-    logs = progress_manager.get_user_progress(user_id)
+    logs = progress_manager.get_user_progress(user_id, get_participant_code(user_id))
     
     # Note: We always generate a report, even if user had no errors or new words
     # This allows the tutor to congratulate them and suggest higher difficulty

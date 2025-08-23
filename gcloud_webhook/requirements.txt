@@ -5,3 +5,4 @@ starlette==0.37.2
 httpx==0.28.1
 google-cloud-storage==2.14.0
 google-cloud-secret-manager==2.20.0
+pytz==2023.3
