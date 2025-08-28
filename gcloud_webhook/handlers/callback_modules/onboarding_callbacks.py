@@ -9,13 +9,12 @@ This module handles all onboarding-related actions including:
 
 import asyncio
 import logging
-import time
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from config import GAME_STATE, POST_TEST_TASKS
+from config import GAME_STATE
 from utils import load_system_prompt
-from ..game_utils import cancel_post_test_task, schedule_post_test_message, save_user_game_state
+from ..game_utils import save_user_game_state
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +26,31 @@ async def handle_onboarding_action(update: Update, context: ContextTypes.DEFAULT
     await query.edit_message_reply_markup(reply_markup=None)
 
     if sub_action == "step2":
+        # Show links and questionnaire information
+        links_text = load_system_prompt("game_texts/onboarding_2_links.txt")
+        keyboard = [[InlineKeyboardButton("📝 First questionnaire done, let's go!", callback_data="onboarding__step4")]]
+        
+        sent_message = await context.bot.send_message(
+            chat_id=user_id, 
+            text=links_text,
+            parse_mode='Markdown',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        
+        # Pin the message with links
+        try:
+            await context.bot.pin_chat_message(
+                chat_id=user_id,
+                message_id=sent_message.message_id,
+                disable_notification=True
+            )
+            logger.info(f"User {user_id}: Links message pinned successfully")
+        except Exception as e:
+            logger.warning(f"User {user_id}: Could not pin links message: {e}")
+        
+        GAME_STATE[user_id]["onboarding_step"] = "links_shown"
+    
+    elif sub_action == "step4":
         # Request participant code
         code_text = load_system_prompt("game_texts/onboarding_2_code.txt")
         await context.bot.send_message(
@@ -38,7 +62,7 @@ async def handle_onboarding_action(update: Update, context: ContextTypes.DEFAULT
         GAME_STATE[user_id]["waiting_for_participant_code"] = True
         GAME_STATE[user_id]["onboarding_step"] = "waiting_for_code"
     
-    elif sub_action == "step4":
+    elif sub_action == "step5":
         # Check if participant code was entered
         if not GAME_STATE[user_id].get("participant_code"):
             await query.answer("❌ Please enter your participant code first!")
@@ -351,23 +375,8 @@ async def handle_case_intro_action(update: Update, context: ContextTypes.DEFAULT
         # Show the first case introduction (this is called from the Start Investigation button)
         logger.info(f"User {user_id}: Starting case introduction sequence")
         
-        # Record game start time
-        GAME_STATE[user_id]["game_start_time"] = time.time()
-        logger.info(f"User {user_id}: Game start time recorded")
-        
-        # Save state with game start time
+        # Save game state
         await save_user_game_state(user_id)
-        
-        # Schedule post-test message after 20 minutes
-        post_test_delay = 1200  # 20 minutes in seconds
-        
-        # Cancel any existing post-test task for this user
-        cancel_post_test_task(user_id)
-        
-        # Create and track new post-test task
-        task = asyncio.create_task(schedule_post_test_message(user_id, context, post_test_delay))
-        POST_TEST_TASKS[user_id] = task
-        logger.info(f"User {user_id}: Post-test message scheduled for {post_test_delay} seconds later")
         
         try:
             case_intro_1_text = load_system_prompt("game_texts/case_intro_1_call.txt")

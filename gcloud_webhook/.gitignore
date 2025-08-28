@@ -50,3 +50,8 @@ chat_logs.txt
 # Temporary files
 *.tmp
 *.temp
+
+# Reminder system (contains participant data)
+reminder_system.py
+reminder_config.py
+REMINDER_SYSTEM_README.md

@@ -11,7 +11,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.constants import ChatAction
 
-from config import GAME_STATE, POST_TEST_TASKS
+from config import GAME_STATE
 from ai_services import ask_tutor_for_final_summary
 from utils import log_message, split_long_message
 from game_state_manager import game_state_manager
@@ -26,21 +26,6 @@ def get_participant_code(user_id: int) -> str:
     return state.get("participant_code")
 
 
-async def check_and_schedule_post_test_message(user_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """Check if post-test message should be scheduled for a restored game."""
-    # Import here to avoid circular imports
-    from .game_utils import schedule_post_test_message
-    
-    state = GAME_STATE.get(user_id, {})
-    
-    # Check if game is completed and post-test message should be sent
-    if (state.get("game_completed") and 
-        state.get("reveal_step", 0) >= 5 and 
-        user_id not in POST_TEST_TASKS):
-        
-        # Schedule post-test message with a short delay
-        await schedule_post_test_message(user_id, context, delay_seconds=5)
-        logger.info(f"User {user_id}: Scheduled post-test message for restored completed game")
 
 
 async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_TYPE, is_final_report: bool = False):
@@ -79,9 +64,7 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
             # Ensure game_completed flag is set if it doesn't exist
             if "game_completed" not in saved_state:
                 saved_state["game_completed"] = False
-            # Ensure message_count field exists for backwards compatibility
-            if "message_count" not in saved_state:
-                saved_state["message_count"] = 0
+
             GAME_STATE[user_id] = saved_state
             
             # Delete the typing message
@@ -93,7 +76,7 @@ async def progress_report_handler(update: Update, context: ContextTypes.DEFAULT_
             logger.info(f"User {user_id}: Automatically restored game state from saved data in progress report")
             
             # Check if post-test message should be scheduled for restored game
-            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+
         else:
             # Delete the typing message
             try:

@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes
 
 from config import GAME_STATE
 from game_state_manager import game_state_manager
-from .game_utils import check_and_schedule_post_test_message
+
 
 # Import all specialized callback handlers
 from .callback_modules import (
@@ -82,14 +82,13 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             # Ensure required fields exist
             if "game_completed" not in saved_state:
                 saved_state["game_completed"] = False
-            if "message_count" not in saved_state:
-                saved_state["message_count"] = 0
+
             GAME_STATE[user_id] = saved_state
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in button callback")
             
             # Check if post-test message should be scheduled for restored game
-            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+
         else:
             await query.edit_message_text(text="This button has expired. Please start over with /start.")
             return

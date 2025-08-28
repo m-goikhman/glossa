@@ -17,13 +17,10 @@ from .reports import progress_report_handler, generate_final_english_report
 from .tutoring import analyze_and_log_text, send_tutor_explanation
 from .game_utils import (
     get_participant_code, 
-    cancel_post_test_task, 
     save_user_game_state, 
     check_and_unlock_accuse, 
     is_player_ready_to_accuse, 
-    get_random_common_space_phrase,
-    check_and_schedule_post_test_message,
-    schedule_post_test_message
+    get_random_common_space_phrase
 )
 
 # Main message handler
@@ -56,13 +53,10 @@ __all__ = [
     
     # Game Utils
     'get_participant_code',
-    'cancel_post_test_task',
     'save_user_game_state',
     'check_and_unlock_accuse',
     'is_player_ready_to_accuse',
     'get_random_common_space_phrase',
-    'check_and_schedule_post_test_message',
-    'schedule_post_test_message',
     
     # Main handler
     'handle_message'

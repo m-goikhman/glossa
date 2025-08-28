@@ -1,7 +1,0 @@
-🎙️ *You have now examined all the evidence and spoken privately with every suspect.*
-
-A new option is now available in your Game Menu: **Make an Accusation**.
-
-Choose wisely - you have **2 attempts** to identify the correct suspect. If you accuse someone incorrectly, they will defend themselves and give you clues, but if you're wrong twice, the real attacker will escape.
-
-There's no time limit, so feel free to review everything before making your decision.

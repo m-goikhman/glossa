@@ -1,7 +1,5 @@
-🤔 **Are you sure you want to make an accusation now?**
+🤔 Are you sure you want to make an accusation now?
 
-As a detective, it's usually better to gather all available evidence and speak with every suspect before making such an important decision. You only have **2 chances** to identify the correct attacker.
+It's better to get all the evidence and speak with every suspect before deciding. You only have *2 chances* to find the correct attacker.
 
 {missing_info}
-
-Are you absolutely certain you want to go on with an accusation now?

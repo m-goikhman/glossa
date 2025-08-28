@@ -20,11 +20,19 @@ def validate_ai_response(response: str, character_key: str = None) -> tuple[bool
     
     response = response.strip()
     
-    # Check for excessive length (Telegram limit)
+    # Check for excessive length (Telegram limit and corruption indicator)
     if len(response) > TELEGRAM_MAX_MESSAGE_LENGTH:
         print(f"WARNING: AI response too long ({len(response)} chars), truncating")
         response = response[:TELEGRAM_MAX_MESSAGE_LENGTH-50] + "..."
         return True, response
+    
+    # Check for suspiciously long responses that might indicate corruption
+    if len(response) > 2000:
+        # For longer responses, do additional corruption checks
+        char_variety = len(set(response.replace(' ', '').replace('\n', '').replace('\t', '')))
+        if char_variety < 20:  # Very low character variety suggests repetition
+            print(f"WARNING: Suspiciously long response with low character variety ({char_variety} unique chars)")
+            return False, _get_fallback_response(character_key)
     
     # Check for corruption patterns
     corruption_patterns = [
@@ -38,6 +46,15 @@ def validate_ai_response(response: str, character_key: str = None) -> tuple[bool
         r'(PSI|MAV|Basel|Toastr|contaminants|roscope){5,}',
         # Excessive parentheses or brackets
         r'[\(\)\[\]]{10,}',
+        # Excessive quotes (new pattern for the reported issue)
+        r'["\'"]{15,}',  # 15+ consecutive quote characters
+        # Repeated test/option strings (new pattern)
+        r'(test){8,}',  # "test" repeated 8+ times
+        r'(option){8,}',  # "option" repeated 8+ times
+        # Comma-separated repeated words (new pattern)
+        r'("[^"]*",\s*){20,}',  # 20+ comma-separated quoted items
+        # Excessive commas
+        r'[,]{10,}',  # 10+ consecutive commas
     ]
     
     for pattern in corruption_patterns:
@@ -63,6 +80,16 @@ def validate_ai_response(response: str, character_key: str = None) -> tuple[bool
             print(f"WARNING: Suspicious word length pattern (avg: {avg_word_length})")
             return False, _get_fallback_response(character_key)
     
+    # Check for incomplete or cut-off responses that might indicate corruption
+    suspicious_endings = [
+        'AssistantClass', '<|python_tag|>', '<|reserved_special_token_', '"}"}"}"}',
+        'scalablytyped', 'надлеж', 'кто-то', '...",",",",",",",",",",",",",",",",",",",",'
+    ]
+    for ending in suspicious_endings:
+        if ending.lower() in response.lower():
+            print(f"WARNING: Suspicious token/pattern detected: '{ending[:20]}...'")
+            return False, _get_fallback_response(character_key)
+    
     return True, response
 
 def _get_fallback_response(character_key: str = None) -> str:
@@ -71,6 +98,12 @@ def _get_fallback_response(character_key: str = None) -> str:
         from config import CHARACTER_DATA
         char_data = CHARACTER_DATA.get(character_key, {})
         char_name = char_data.get("full_name", character_key)
+        
+        # Special fallback for narrator
+        if character_key == "narrator":
+            return "We step aside to talk in private, away from the others."
+        
+        # Generic fallback for other characters
         return f"I need a moment to think about that properly."
     return "I'm having trouble processing that request right now."
 
@@ -120,8 +153,17 @@ async def ask_for_dialogue(user_id: int, user_message: str, system_prompt: str, 
             print(f"WARNING: AI response validation failed for user {user_id}, using fallback")
             log_message(user_id, "ai_validation_failed", f"Original response preview: {assistant_reply[:200]}...", None)
             
-            # If corruption is severe (very long corrupted response), clear conversation history
-            if len(assistant_reply) > 5000:
+            # Clear conversation history more aggressively when corruption is detected
+            # Lowered threshold from 5000 to 2000 chars, and also clear on certain patterns
+            should_clear_history = (
+                len(assistant_reply) > 2000 or  # Long corrupted responses
+                '"""""""' in assistant_reply or  # Quote repetition pattern
+                'testtesttest' in assistant_reply or  # Test repetition pattern
+                'optionoptionoption' in assistant_reply or  # Option repetition pattern
+                assistant_reply.count(',') > 50  # Excessive commas
+            )
+            
+            if should_clear_history:
                 print(f"WARNING: Severe AI corruption detected for user {user_id}, clearing conversation history")
                 clear_user_conversation_history(user_id)
             
@@ -184,7 +226,15 @@ async def ask_tutor_for_analysis(user_id: int, text_to_analyze: str) -> dict:
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.5)
         response_text = chat_completion.choices[0].message.content
-        return json.loads(response_text)
+        
+        # Validate response for corruption
+        is_valid, validated_response = validate_ai_response(response_text)
+        if not is_valid:
+            print(f"WARNING: Tutor analysis response validation failed for user {user_id}")
+            log_message(user_id, "tutor_validation_failed", f"Corrupted tutor response: {response_text[:200]}...", None)
+            return {"improvement_needed": False, "feedback": ""}
+        
+        return json.loads(validated_response)
     except (json.JSONDecodeError, Exception) as e:
         log_message(user_id, "tutor_error", f"Could not parse tutor analysis JSON: {e}", None)
         return {"improvement_needed": False, "feedback": ""}
@@ -202,7 +252,15 @@ async def ask_tutor_for_explanation(user_id: int, text_to_explain: str, original
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.5)
         response_text = chat_completion.choices[0].message.content
-        return json.loads(response_text)
+        
+        # Validate response for corruption
+        is_valid, validated_response = validate_ai_response(response_text)
+        if not is_valid:
+            print(f"WARNING: Tutor explanation response validation failed for user {user_id}")
+            log_message(user_id, "tutor_validation_failed", f"Corrupted tutor response: {response_text[:200]}...", None)
+            return {}
+        
+        return json.loads(validated_response)
     except (json.JSONDecodeError, Exception) as e:
         log_message(user_id, "tutor_error", f"Could not parse tutor explanation JSON: {e}", None)
         return {}
@@ -238,7 +296,15 @@ async def ask_tutor_for_final_summary(user_id: int, progress_data: dict) -> dict
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.7)
         response_text = chat_completion.choices[0].message.content
-        return json.loads(response_text)
+        
+        # Validate response for corruption
+        is_valid, validated_response = validate_ai_response(response_text)
+        if not is_valid:
+            print(f"WARNING: Tutor final summary response validation failed for user {user_id}")
+            log_message(user_id, "tutor_validation_failed", f"Corrupted tutor response: {response_text[:200]}...", None)
+            return {"summary": "Great job completing the game! You showed curiosity and engagement with English. Keep practicing and you'll continue to improve!"}
+        
+        return json.loads(validated_response)
     except (json.JSONDecodeError, Exception) as e:
         log_message(user_id, "tutor_error", f"Could not parse tutor final summary JSON: {e}", None)
         return {"summary": "Great job completing the game! You showed curiosity and engagement with English. Keep practicing and you'll continue to improve!"}
@@ -251,7 +317,15 @@ async def ask_word_spotter(text_to_analyze: str) -> list:
     try:
         chat_completion = client.chat.completions.create(model="llama-3.3-70b-versatile", messages=messages, temperature=0.2)
         response_text = chat_completion.choices[0].message.content
-        words = json.loads(response_text)
+        
+        # Validate response for corruption
+        is_valid, validated_response = validate_ai_response(response_text)
+        if not is_valid:
+            print(f"WARNING: Word spotter response validation failed")
+            print(f"Corrupted word spotter response: {response_text[:200]}...")
+            return []
+        
+        words = json.loads(validated_response)
         return [word.lower() for word in words]
     except Exception as e:
         print(f"Error calling Word Spotter or parsing JSON: {e}"); return []
@@ -294,9 +368,16 @@ async def ask_director(user_id: int, context_text: str, message: str) -> dict:
         print(f"DEBUG: Director raw response for user {user_id}: {response_text[:200]}...")
         log_message(user_id, "director", response_text, None)
         
+        # Validate response for corruption before parsing JSON
+        is_valid, validated_response = validate_ai_response(response_text)
+        if not is_valid:
+            print(f"WARNING: Director response validation failed for user {user_id}")
+            log_message(user_id, "director_validation_failed", f"Corrupted director response: {response_text[:200]}...", None)
+            return {"scene": []}
+        
         # Try to parse the JSON response
         try:
-            director_decision = json.loads(response_text)
+            director_decision = json.loads(validated_response)
             print(f"DEBUG: Director parsed JSON for user {user_id}: {director_decision}")
             
             # Validate the response structure

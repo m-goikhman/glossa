@@ -4,12 +4,12 @@ Command handlers for the Telegram bot.
 This module contains handlers for bot commands like /start, /restart, etc.
 """
 
-import asyncio
+
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from config import GAME_STATE, POST_TEST_TASKS
+from config import GAME_STATE
 from utils import load_system_prompt, log_message
 from ai_services import clear_user_conversation_history
 from game_state_manager import game_state_manager
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 # Import utility functions from game_utils
-from .game_utils import get_participant_code, cancel_post_test_task, check_and_schedule_post_test_message
+from .game_utils import get_participant_code
 
 
 async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -37,8 +37,7 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             # Game was completed - start fresh instead of resuming
             logger.info(f"User {user_id}: Previous game was completed, starting fresh")
             
-            # Cancel any existing post-test task
-            cancel_post_test_task(user_id)
+
             
             # Clear the completed game state from storage
             await game_state_manager.delete_game_state(user_id)
@@ -63,23 +62,21 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
                 "game_completed": False,
                 "participant_code": None,
                 "waiting_for_participant_code": False,
-                "onboarding_step": "consent",
-                "game_start_time": None,
-                "message_count": 0  # Track user messages since game start
+                "onboarding_step": "consent"
             }
             
-            # Start with consent message (onboarding step 1)
-            consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
-            keyboard = [[InlineKeyboardButton("📝 Questionnaire done, let's get started!", callback_data="onboarding__step2")]]
+            # Start with welcome message (onboarding step 1)
+            welcome_text = load_system_prompt("game_texts/onboarding_1_welcome.txt")
+            keyboard = [[InlineKeyboardButton("Ok, what should I do?", callback_data="onboarding__step2")]]
             
             await update.message.reply_text(
                 "🎮 Starting fresh detective game!",
                 reply_markup=ReplyKeyboardMarkup([[]], resize_keyboard=True)  # Clear keyboard
             )
             
-            # Send consent message with inline keyboard
+            # Send welcome message with inline keyboard
             await update.message.reply_text(
-                consent_text,
+                welcome_text,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
@@ -89,9 +86,6 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
         # Ensure game_completed flag is set if it doesn't exist
         if "game_completed" not in saved_state:
             saved_state["game_completed"] = False
-        # Ensure message_count field exists for backwards compatibility
-        if "message_count" not in saved_state:
-            saved_state["message_count"] = 0
         GAME_STATE[user_id] = saved_state
         
         # Set up persistent keyboard
@@ -129,17 +123,15 @@ async def start_command_handler(update: Update, context: ContextTypes.DEFAULT_TY
             "waiting_for_participant_code": False,
             "onboarding_step": "consent",
             "current_intro_message_id": None,
-            "current_language_level": "B1",
-            "game_start_time": None,
-            "message_count": 0  # Track user messages since game start
+            "current_language_level": "B1"
         }
         
-        consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
-        keyboard = [[InlineKeyboardButton("📝 Questionnaire done, let's get started!", callback_data="onboarding__step2")]]
+        welcome_text = load_system_prompt("game_texts/onboarding_1_welcome.txt")
+        keyboard = [[InlineKeyboardButton("Ok, what should I do?", callback_data="onboarding__step2")]]
         
-        # Send consent message with inline keyboard
+        # Send welcome message with inline keyboard
         await update.message.reply_text(
-            consent_text,
+            welcome_text,
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
         )
@@ -150,8 +142,7 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
     user_id = update.message.from_user.id
     logger.info(f"User {user_id}: Restart command received")
     
-    # Cancel any existing post-test task
-    cancel_post_test_task(user_id)
+
     
     # Clear current game state from memory
     GAME_STATE.pop(user_id, None)
@@ -181,23 +172,21 @@ async def restart_command_handler(update: Update, context: ContextTypes.DEFAULT_
         "waiting_for_participant_code": False,
         "onboarding_step": "consent",
         "current_intro_message_id": None,
-        "current_language_level": "B1",
-        "game_start_time": None,
-        "message_count": 0  # Track user messages since game start
+        "current_language_level": "B1"
     }
     
-    # Start with consent message (onboarding step 1)
-    consent_text = load_system_prompt("game_texts/onboarding_1_consent.txt")
-    keyboard = [[InlineKeyboardButton("📝 Questionnaire done, let's get started!", callback_data="onboarding__step2")]]
+    # Start with welcome message (onboarding step 1)
+    welcome_text = load_system_prompt("game_texts/onboarding_1_welcome.txt")
+    keyboard = [[InlineKeyboardButton("Ok, what should I do?", callback_data="onboarding__step2")]]
     
     await update.message.reply_text(
         "🎮 Game restarted! Starting from the beginning...",
         reply_markup=ReplyKeyboardMarkup([[]], resize_keyboard=True)  # Clear keyboard
     )
     
-    # Send consent message with inline keyboard
+    # Send welcome message with inline keyboard
     await update.message.reply_text(
-        consent_text,
+        welcome_text,
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode='Markdown'
     )
@@ -219,8 +208,7 @@ async def update_keyboard_handler(update: Update, context: ContextTypes.DEFAULT_
             GAME_STATE[user_id] = saved_state
             logger.info(f"User {user_id}: Restored game state for keyboard update")
             
-            # Check if post-test message should be scheduled for restored game
-            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+
         else:
             await update.message.reply_text("You don't have an active game. Use /start to begin!")
             return
@@ -267,9 +255,7 @@ async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
             # Ensure game_completed flag is set if it doesn't exist
             if "game_completed" not in saved_state:
                 saved_state["game_completed"] = False
-            # Ensure message_count field exists for backwards compatibility
-            if "message_count" not in saved_state:
-                saved_state["message_count"] = 0
+
             GAME_STATE[user_id] = saved_state
             
             # Delete the typing message
@@ -280,8 +266,7 @@ async def show_main_menu_handler(update: Update, context: ContextTypes.DEFAULT_T
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in main menu")
             
-            # Check if post-test message should be scheduled for restored game
-            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+
         else:
             # Delete the typing message
             try:
@@ -332,9 +317,7 @@ async def show_language_learning_menu_handler(update: Update, context: ContextTy
             # Ensure game_completed flag is set if it doesn't exist
             if "game_completed" not in saved_state:
                 saved_state["game_completed"] = False
-            # Ensure message_count field exists for backwards compatibility
-            if "message_count" not in saved_state:
-                saved_state["message_count"] = 0
+
             GAME_STATE[user_id] = saved_state
             
             # Delete the typing message
@@ -345,8 +328,7 @@ async def show_language_learning_menu_handler(update: Update, context: ContextTy
             
             logger.info(f"User {user_id}: Automatically restored game state from saved data in ✍️ Learning Menu")
             
-            # Check if post-test message should be scheduled for restored game
-            asyncio.create_task(check_and_schedule_post_test_message(user_id, context))
+
         else:
             # Delete the typing message
             try:

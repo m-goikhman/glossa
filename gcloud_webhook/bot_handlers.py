@@ -36,13 +36,10 @@ from handlers import (
     
     # Game utilities
     get_participant_code,
-    cancel_post_test_task,
     save_user_game_state,
     check_and_unlock_accuse,
     is_player_ready_to_accuse,
     get_random_common_space_phrase,
-    check_and_schedule_post_test_message,
-    schedule_post_test_message,
     
     # Main message handler
     handle_message
@@ -65,12 +62,9 @@ __all__ = [
     'analyze_and_log_text',
     'send_tutor_explanation',
     'get_participant_code',
-    'cancel_post_test_task',
     'save_user_game_state',
     'check_and_unlock_accuse',
     'is_player_ready_to_accuse',
     'get_random_common_space_phrase',
-    'check_and_schedule_post_test_message',
-    'schedule_post_test_message',
     'handle_message'
 ]

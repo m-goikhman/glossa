@@ -53,7 +53,7 @@ class GameStateManager:
             blob = bucket.blob(blob_name)
             
             # Convert sets to lists for JSON serialization
-            serializable_state = self._prepare_state_for_storage(state_with_metadata)
+            serializable_state = self._prepare_state_for_storage(data)
             
             blob.upload_from_string(
                 json.dumps(serializable_state, indent=2, ensure_ascii=False),

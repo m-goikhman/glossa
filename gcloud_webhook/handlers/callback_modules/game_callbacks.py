@@ -92,7 +92,10 @@ async def handle_clue_action(update: Update, context: ContextTypes.DEFAULT_TYPE,
     if reply_message:
         keyboard = create_explain_button(reply_message.message_id)
         save_message_to_cache(reply_message.message_id, clue_text)  # No character for clues
-        await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
+        try:
+            await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
+        except Exception as edit_error:
+            logger.warning(f"User {user_id}: Failed to add explain button to clue message {reply_message.message_id}: {edit_error}")
 
 
 async def handle_talk_action(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int, parts: list):
@@ -108,7 +111,7 @@ async def handle_talk_action(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Get current language level from user's game state
         current_language_level = state.get("current_language_level", "B1")
         narrator_prompt = combine_character_prompt("narrator", current_language_level)
-        description_text = await ask_for_dialogue(user_id, f"Describe taking {char_name} aside for a private talk.", narrator_prompt, "narrator")
+        description_text = await ask_for_dialogue(user_id, f"Describe the detective taking {char_name} aside for a private talk.", narrator_prompt, "narrator")
         
         await query.delete_message()
         reply_message = await context.bot.send_message(chat_id=user_id, text=f"🎙️ _{description_text}_", parse_mode='Markdown')
@@ -143,11 +146,14 @@ async def handle_mode_action(update: Update, context: ContextTypes.DEFAULT_TYPE,
         # Add explain button
         keyboard = create_explain_button(reply_message.message_id)
         save_message_to_cache(reply_message.message_id, random_phrase, char_key)  # Save with character
-        await context.bot.edit_message_reply_markup(
-            chat_id=reply_message.chat_id, 
-            message_id=reply_message.message_id, 
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        try:
+            await context.bot.edit_message_reply_markup(
+                chat_id=reply_message.chat_id, 
+                message_id=reply_message.message_id, 
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except Exception as edit_error:
+            logger.warning(f"User {user_id}: Failed to add explain button to public mode message {reply_message.message_id}: {edit_error}")
         
         # Log the narrator's phrase
         log_message(user_id, "narrator", random_phrase, get_participant_code(user_id))

@@ -227,7 +227,10 @@ async def execute_scene_action(update: Update, context: ContextTypes.DEFAULT_TYP
                     # Add explain button for both character_reply and character_reaction
                     keyboard = create_explain_button(reply_message.message_id)
                     save_message_to_cache(reply_message.message_id, reply_text, char_key)
-                    await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
+                    try:
+                        await context.bot.edit_message_reply_markup(chat_id=reply_message.chat_id, message_id=reply_message.message_id, reply_markup=InlineKeyboardMarkup(keyboard))
+                    except Exception as edit_error:
+                        logger.warning(f"User {user_id}: Failed to add explain button to message {reply_message.message_id}: {edit_error}")
                     
                     # Log the character's response
                     log_message(user_id, f"character_{char_key}", reply_text, get_participant_code(user_id))
@@ -361,11 +364,14 @@ async def handle_character_reply_response(update: Update, context: ContextTypes.
             # Add explain button
             keyboard = create_explain_button(reply_message.message_id)
             save_message_to_cache(reply_message.message_id, reply_text, character_key)
-            await context.bot.edit_message_reply_markup(
-                chat_id=reply_message.chat_id, 
-                message_id=reply_message.message_id, 
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
+            try:
+                await context.bot.edit_message_reply_markup(
+                    chat_id=reply_message.chat_id, 
+                    message_id=reply_message.message_id, 
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+            except Exception as edit_error:
+                logger.warning(f"User {user_id}: Failed to add explain button to character reply message {reply_message.message_id}: {edit_error}")
             
             # Log the character's response
             log_message(user_id, f"character_{character_key}_reply", reply_text, get_participant_code(user_id))

@@ -59,4 +59,3 @@ CHARACTER_DATA = {
 GAME_STATE = {}
 user_histories = {}
 message_cache = {}
-POST_TEST_TASKS = {}  # stores user_id -> asyncio.Task for post-test scheduling

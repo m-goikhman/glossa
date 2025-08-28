@@ -488,7 +488,7 @@ async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_
             # Get current language level from user's game state
             current_language_level = state.get("current_language_level", "B1")
             narrator_prompt = combine_character_prompt("narrator", current_language_level)
-            description_text = await ask_for_dialogue(user_id, f"Describe taking {char_name} aside for a private talk.", narrator_prompt)
+            description_text = await ask_for_dialogue(user_id, f"Describe the detective taking {char_name} aside for a private talk.", narrator_prompt)
             
             await query.delete_message()
             reply_message = await context.bot.send_message(chat_id=user_id, text=f"🎙️ _{description_text}_", parse_mode='Markdown')
