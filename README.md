@@ -112,19 +112,6 @@ gcloud app deploy
 - **Secure Storage**: Production version uses Google Cloud with proper access controls
 - **Environment Isolation**: Development and production configurations are separate
 
-## 🧪 Testing
-
-```bash
-# Test game state management
-python3 gcloud_webhook/test_game_state.py
-
-# Test progress tracking  
-python3 gcloud_webhook/test_progress.py
-
-# Test secret management
-python3 gcloud_webhook/test_secrets.py
-```
-
 ## 📝 Development Notes
 
 This project was developed in close collaboration with an AI assistant. The core Python code, project architecture, and prompt engineering were iteratively designed and generated with the help of **Google's Gemini Pro 2.5**.
@@ -134,6 +121,7 @@ This project was developed in close collaboration with an AI assistant. The core
 - **Original Game**: "The Business of Murder" by John H. Kim
 - **Source**: https://www.darkshire.net/jhkim/rpg/murder/business.html
 - **License**: Used with permission from the author for chatbot experimentation
+- Background image (images/aric-cheng-7Bv9MrBan9s-unsplash.jpg): Photo by Aric Cheng, freely available on Unsplash
 
 ## 📄 License
 
